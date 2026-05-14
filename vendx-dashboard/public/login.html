@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login | VendX Monitoring Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-hero" aria-label="VendX system information">
+      <div class="brand-mark">VX</div>
+      <p class="eyebrow">VendX IoT System</p>
+      <h1>VendX</h1>
+      <h2>Monitoring Dashboard</h2>
+      <p class="hero-copy">Secure access for vending machine administrators</p>
+
+      <div class="system-notes">
+        <div>
+          <span>Dashboard monitoring only</span>
+          <strong>Admin panel tidak memproses pembelian.</strong>
+        </div>
+        <div>
+          <span>ESP32 vending flow</span>
+          <strong>Purchases are handled directly from ESP32 vending machine.</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="auth-card" aria-label="Login form">
+      <div class="mobile-brand">
+        <div class="brand-mark">VX</div>
+        <div>
+          <strong>VendX</strong>
+          <span>Monitoring Dashboard</span>
+        </div>
+      </div>
+
+      <div class="form-heading">
+        <p class="eyebrow">Secure sign in</p>
+        <h2>Welcome back</h2>
+        <p>Masuk dengan akun admin, operator, atau viewer yang terdaftar.</p>
+      </div>
+
+      <form id="loginForm" novalidate>
+        <div class="field-group">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" placeholder="admin@vendx.com" required>
+        </div>
+
+        <div class="field-group">
+          <label for="password">Password</label>
+          <div class="password-field">
+            <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Masukkan password" required>
+            <button id="togglePassword" type="button" aria-label="Show password">Show</button>
+          </div>
+        </div>
+
+        <div id="authMessage" class="auth-message" role="alert" aria-live="polite"></div>
+
+        <button id="signInButton" class="primary-button" type="submit">
+          <span class="button-text">Sign In</span>
+          <span class="button-loader" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <footer class="auth-footer">
+        <span>VendX IoT System</span>
+        <span id="currentYear">2026</span>
+      </footer>
+    </section>
+  </main>
+
+  <script type="module" src="js/auth.js"></script>
+</body>
+</html>

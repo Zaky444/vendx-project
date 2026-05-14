@@ -1,0 +1,292 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false,
+        "email": {
+          ".validate": "newData.isString()"
+        },
+        "name": {
+          ".validate": "newData.isString()"
+        },
+        "role": {
+          ".validate": "newData.val() === 'admin' || newData.val() === 'operator' || newData.val() === 'viewer'"
+        },
+        "assigned_machine": {
+          ".validate": "newData.isString()"
+        },
+        "is_active": {
+          ".validate": "newData.isBoolean()"
+        },
+        "created_at": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "last_login": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+
+    "machines": {
+      ".read": "auth != null",
+      "$machineId": {
+        "info": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+          ".validate": "newData.hasChildren(['machine_name', 'location', 'firmware_version', 'model', 'installed_date', 'is_online'])",
+          "machine_name": {
+            ".validate": "newData.isString()"
+          },
+          "location": {
+            ".validate": "newData.isString()"
+          },
+          "firmware_version": {
+            ".validate": "newData.isString()"
+          },
+          "model": {
+            ".validate": "newData.isString()"
+          },
+          "installed_date": {
+            ".validate": "newData.isString()"
+          },
+          "is_online": {
+            ".validate": "newData.isBoolean()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+
+        "status": {
+          ".write": true,
+          ".validate": "newData.hasChildren(['machine_state', 'is_busy', 'connection', 'dispense_result', 'last_update', 'last_updated', 'temperature', 'door_status'])",
+          "machine_state": {
+            ".validate": "newData.val() === 'IDLE' || newData.val() === 'SELECTING' || newData.val() === 'WAITING_PAYMENT' || newData.val() === 'READY_TO_DISPENSE' || newData.val() === 'DISPENSING' || newData.val() === 'COMPLETED' || newData.val() === 'DISPENSE_FAILED' || newData.val() === 'PAYMENT_TIMEOUT' || newData.val() === 'PAYMENT_FAILED' || newData.val() === 'ERROR' || newData.val() === 'NONE'"
+          },
+          "is_busy": {
+            ".validate": "newData.isBoolean()"
+          },
+          "connection": {
+            ".validate": "newData.val() === 'ONLINE' || newData.val() === 'OFFLINE' || newData.val() === 'NONE'"
+          },
+          "dispense_result": {
+            ".validate": "newData.val() === 'NONE' || newData.val() === 'SUCCESS' || newData.val() === 'FAILED' || newData.val() === 'ERROR'"
+          },
+          "last_update": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "last_updated": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "temperature": {
+            ".validate": "newData.isNumber()"
+          },
+          "door_status": {
+            ".validate": "newData.val() === 'OPEN' || newData.val() === 'CLOSED' || newData.val() === 'NONE'"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+
+        "items": {
+          "$itemId": {
+            ".read": "auth != null",
+            ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'operator')",
+            ".validate": "newData.hasChildren(['name', 'price', 'stock', 'slot_number', 'is_active'])",
+            "name": {
+              ".validate": "newData.isString()"
+            },
+            "price": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "stock": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "slot_number": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "is_active": {
+              ".validate": "newData.isBoolean()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+
+        "current_order": {
+          ".read": "auth != null",
+          ".write": true,
+          ".validate": "newData.hasChildren(['transaction_id', 'session_id', 'item_id', 'item_name', 'qty', 'price', 'total_price', 'payment_method', 'payment_state', 'order_state', 'qr_url', 'payment_url', 'expired_at'])",
+          "transaction_id": {
+            ".validate": "newData.isString()"
+          },
+          "session_id": {
+            ".validate": "newData.isString()"
+          },
+          "item_id": {
+            ".validate": "newData.isString()"
+          },
+          "item_name": {
+            ".validate": "newData.isString()"
+          },
+          "qty": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "price": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "total_price": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "payment_method": {
+            ".validate": "newData.isString()"
+          },
+          "payment_state": {
+            ".validate": "newData.val() === 'NONE' || newData.val() === 'PENDING' || newData.val() === 'WAITING_PAYMENT' || newData.val() === 'PAID' || newData.val() === 'FAILED' || newData.val() === 'PAYMENT_FAILED' || newData.val() === 'PAYMENT_TIMEOUT' || newData.val() === 'EXPIRED'"
+          },
+          "order_state": {
+            ".validate": "newData.val() === 'NONE' || newData.val() === 'WAITING_PAYMENT' || newData.val() === 'READY_TO_DISPENSE' || newData.val() === 'DISPENSING' || newData.val() === 'COMPLETED' || newData.val() === 'DISPENSE_FAILED' || newData.val() === 'PAYMENT_FAILED' || newData.val() === 'PAYMENT_TIMEOUT' || newData.val() === 'FAILED'"
+          },
+          "qr_url": {
+            ".validate": "newData.isString()"
+          },
+          "payment_url": {
+            ".validate": "newData.isString()"
+          },
+          "expired_at": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "dispense_result": {
+            ".validate": "newData.val() === 'NONE' || newData.val() === 'SUCCESS' || newData.val() === 'FAILED' || newData.val() === 'ERROR'"
+          },
+          "updated_at": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+
+    "transactions": {
+      ".read": "auth != null",
+      "$transactionId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['transaction_id', 'session_id', 'machine_id', 'item_id', 'item_name', 'qty', 'price', 'total_price', 'payment_method', 'payment_state', 'order_state', 'status', 'dispense_result', 'midtrans_order_id', 'midtrans_transaction_id', 'payment_type', 'payment_url', 'qr_url', 'fraud_status', 'created_at', 'updated_at', 'expired_at'])",
+        "transaction_id": {
+          ".validate": "newData.isString() && newData.val() === $transactionId"
+        },
+        "session_id": {
+          ".validate": "newData.isString()"
+        },
+        "machine_id": {
+          ".validate": "newData.isString()"
+        },
+        "item_id": {
+          ".validate": "newData.isString()"
+        },
+        "item_name": {
+          ".validate": "newData.isString()"
+        },
+        "qty": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "price": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "total_price": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "payment_method": {
+          ".validate": "newData.isString()"
+        },
+        "payment_state": {
+          ".validate": "newData.val() === 'NONE' || newData.val() === 'PENDING' || newData.val() === 'WAITING_PAYMENT' || newData.val() === 'PAID' || newData.val() === 'FAILED' || newData.val() === 'PAYMENT_FAILED' || newData.val() === 'PAYMENT_TIMEOUT' || newData.val() === 'EXPIRED'"
+        },
+        "status": {
+          ".validate": "newData.val() === 'NONE' || newData.val() === 'WAITING_PAYMENT' || newData.val() === 'READY_TO_DISPENSE' || newData.val() === 'DISPENSING' || newData.val() === 'COMPLETED' || newData.val() === 'DISPENSE_FAILED' || newData.val() === 'PAYMENT_FAILED' || newData.val() === 'PAYMENT_TIMEOUT' || newData.val() === 'FAILED' || newData.val() === 'CANCELED' || newData.val() === 'EXPIRED'"
+        },
+        "order_state": {
+          ".validate": "newData.val() === 'NONE' || newData.val() === 'WAITING_PAYMENT' || newData.val() === 'READY_TO_DISPENSE' || newData.val() === 'DISPENSING' || newData.val() === 'COMPLETED' || newData.val() === 'DISPENSE_FAILED' || newData.val() === 'PAYMENT_FAILED' || newData.val() === 'PAYMENT_TIMEOUT' || newData.val() === 'FAILED' || newData.val() === 'CANCELED' || newData.val() === 'EXPIRED'"
+        },
+        "dispense_result": {
+          ".validate": "newData.val() === 'NONE' || newData.val() === 'SUCCESS' || newData.val() === 'FAILED' || newData.val() === 'ERROR'"
+        },
+        "midtrans_order_id": {
+          ".validate": "newData.isString()"
+        },
+        "midtrans_transaction_id": {
+          ".validate": "newData.isString()"
+        },
+        "payment_type": {
+          ".validate": "newData.isString()"
+        },
+        "payment_url": {
+          ".validate": "newData.isString()"
+        },
+        "qr_url": {
+          ".validate": "newData.isString()"
+        },
+        "fraud_status": {
+          ".validate": "newData.isString()"
+        },
+        "created_at": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "updated_at": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "expired_at": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+
+    "logs": {
+      ".read": "auth != null",
+      "$logId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['machine_id', 'event', 'message', 'source', 'timestamp'])",
+        "machine_id": {
+          ".validate": "newData.isString()"
+        },
+        "event": {
+          ".validate": "newData.isString()"
+        },
+        "message": {
+          ".validate": "newData.isString()"
+        },
+        "source": {
+          ".validate": "newData.val() === 'ESP32' || newData.val() === 'DASHBOARD' || newData.val() === 'BACKEND' || newData.val() === 'MIDTRANS' || newData.val() === 'SYSTEM'"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+
+    "$other": {
+      ".validate": false
+    }
+  }
+}

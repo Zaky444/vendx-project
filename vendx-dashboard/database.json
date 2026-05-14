@@ -1,0 +1,117 @@
+{
+  "users": {
+    "oXNIZB95Sdf3HGc9CullKPPyeVa2": {
+      "email": "admin@vendx.com",
+      "name": "Admin VendX",
+      "role": "admin",
+      "assigned_machine": "VM001",
+      "is_active": true,
+      "created_at": 1747090000000,
+      "last_login": 0
+    }
+  },
+  "machines": {
+    "VM001": {
+      "info": {
+        "machine_name": "VendX Alpha",
+        "location": "Gedung A Lantai 1",
+        "firmware_version": "2.0.0",
+        "model": "ESP32-WROOM-32",
+        "installed_date": "2026-05-01",
+        "is_online": true
+      },
+      "status": {
+        "machine_state": "IDLE",
+        "is_busy": false,
+        "connection": "ONLINE",
+        "dispense_result": "NONE",
+        "last_update": 0,
+        "last_updated": 0,
+        "temperature": 5.2,
+        "door_status": "CLOSED"
+      },
+      "items": {
+        "cola": {
+          "name": "Cola",
+          "price": 5000,
+          "stock": 10,
+          "slot_number": 1,
+          "is_active": true
+        },
+        "sprite": {
+          "name": "Sprite",
+          "price": 5000,
+          "stock": 8,
+          "slot_number": 2,
+          "is_active": true
+        },
+        "susu": {
+          "name": "Susu",
+          "price": 4000,
+          "stock": 5,
+          "slot_number": 3,
+          "is_active": true
+        },
+        "kopi": {
+          "name": "Kopi",
+          "price": 3000,
+          "stock": 4,
+          "slot_number": 4,
+          "is_active": true
+        }
+      },
+      "current_order": {
+        "transaction_id": "NONE",
+        "session_id": "NONE",
+        "item_id": "NONE",
+        "item_name": "NONE",
+        "qty": 0,
+        "price": 0,
+        "total_price": 0,
+        "payment_method": "NONE",
+        "payment_state": "NONE",
+        "order_state": "NONE",
+        "dispense_result": "NONE",
+        "qr_url": "NONE",
+        "payment_url": "NONE",
+        "expired_at": 0,
+        "updated_at": 0
+      }
+    }
+  },
+  "transactions": {
+    "TRX_EXAMPLE": {
+      "transaction_id": "TRX_EXAMPLE",
+      "session_id": "SESSION001",
+      "machine_id": "VM001",
+      "item_id": "cola",
+      "item_name": "Cola",
+      "qty": 1,
+      "price": 5000,
+      "total_price": 5000,
+      "payment_method": "QRIS",
+      "payment_state": "PAID",
+      "order_state": "COMPLETED",
+      "status": "COMPLETED",
+      "dispense_result": "SUCCESS",
+      "midtrans_order_id": "TRX_EXAMPLE",
+      "midtrans_transaction_id": "NONE",
+      "payment_type": "qris",
+      "payment_url": "NONE",
+      "qr_url": "NONE",
+      "fraud_status": "NONE",
+      "created_at": 1747090000000,
+      "updated_at": 1747090005000,
+      "expired_at": 1747090900000
+    }
+  },
+  "logs": {
+    "LOG001": {
+      "machine_id": "VM001",
+      "event": "SYSTEM_BOOT",
+      "message": "ESP32 started successfully",
+      "source": "ESP32",
+      "timestamp": 1747090000000
+    }
+  }
+}

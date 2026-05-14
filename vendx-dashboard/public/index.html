@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VendX Monitoring Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero-header">
+      <nav class="topbar" aria-label="Dashboard navigation">
+        <div class="brand-block">
+          <div class="brand-mark">VX</div>
+          <div>
+            <strong>VendX</strong>
+            <span>Admin Monitoring</span>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="clock-chip" id="currentClock">-</div>
+          <div class="user-chip" aria-label="Logged in user">
+            <span id="userName">NONE</span>
+            <span id="userRole">NONE</span>
+            <span id="userMachine">NONE</span>
+          </div>
+          <button id="logoutButton" class="logout-button" type="button">Logout</button>
+        </div>
+      </nav>
+
+      <div class="hero-content">
+        <div>
+          <p class="eyebrow">ESP32 Vending Machine Monitoring</p>
+          <h1>VendX Monitoring Dashboard</h1>
+          <p class="hero-copy">Pantau mesin, transaksi, stok produk, dan aktivitas operasional secara realtime.</p>
+        </div>
+        <div class="realtime-indicator" aria-live="polite">
+          <span class="pulse-dot"></span>
+          <span id="realtimeStatus">Checking login session</span>
+        </div>
+      </div>
+
+      <section class="machine-summary" aria-label="Machine information">
+        <div class="summary-item">
+          <span class="summary-label">Machine</span>
+          <strong id="machineName">NONE</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Location</span>
+          <strong id="machineLocation">NONE</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Model</span>
+          <strong id="machineModel">NONE</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Firmware</span>
+          <strong id="firmwareVersion">NONE</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Machine ID</span>
+          <strong id="machineIdLabel">NONE</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Last Updated</span>
+          <strong id="lastUpdated">-</strong>
+        </div>
+      </section>
+    </header>
+
+    <main>
+      <section class="metrics-grid" aria-label="Business summary cards">
+        <article class="metric-card accent-teal">
+          <span class="metric-label">Connection</span>
+          <strong id="connectionValue">NONE</strong>
+          <span id="connectionBadge" class="badge badge-none">NONE</span>
+        </article>
+        <article class="metric-card accent-blue">
+          <span class="metric-label">Machine State</span>
+          <strong id="machineStateValue">NONE</strong>
+          <span id="machineStateBadge" class="badge badge-none">NONE</span>
+        </article>
+        <article class="metric-card accent-green">
+          <span class="metric-label">Today Orders</span>
+          <strong id="todayOrders">0</strong>
+          <span class="metric-hint">Completed today</span>
+        </article>
+        <article class="metric-card accent-purple">
+          <span class="metric-label">Monthly Orders</span>
+          <strong id="monthlyOrders">0</strong>
+          <span class="metric-hint">Completed this month</span>
+        </article>
+        <article class="metric-card accent-orange">
+          <span class="metric-label">Today Revenue</span>
+          <strong id="todayRevenue">Rp0</strong>
+          <span class="metric-hint">Paid and completed</span>
+        </article>
+        <article class="metric-card accent-rose">
+          <span class="metric-label">Monthly Revenue</span>
+          <strong id="monthlyRevenue">Rp0</strong>
+          <span class="metric-hint">Current month</span>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel inventory-panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Inventory Management</p>
+              <h2>Product Stock</h2>
+              <p id="itemsPathLabel">Data produk dari machines/NONE/items</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Slot</th>
+                  <th>Item ID</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Active Status</th>
+                  <th>Stock Level</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="itemsTableBody">
+                <tr><td colspan="8" class="empty-state">No data available</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel order-panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Live Session</p>
+              <h2>Current Order</h2>
+              <p id="orderPathLabel">Order aktif dari machines/NONE/current_order</p>
+            </div>
+          </div>
+          <div id="currentOrderContent" class="order-content">
+            <div class="empty-state block">
+              <div class="empty-icon">i</div>
+              <strong>No active order</strong>
+              <span>Mesin saat ini tidak sedang memproses pesanan.</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="lower-grid">
+        <article class="panel">
+          <div class="panel-header panel-header-inline">
+            <div>
+              <p class="section-kicker">Transaction History</p>
+              <h2>Recent Transactions</h2>
+              <p>5 transaksi terbaru dari /transactions</p>
+            </div>
+            <button class="secondary-button" type="button" disabled>View All Transactions</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Transaction ID</th>
+                  <th>Item Name</th>
+                  <th>Qty</th>
+                  <th>Total Price</th>
+                  <th>Payment State</th>
+                  <th>Status</th>
+                  <th>Dispense Result</th>
+                  <th>Updated At</th>
+                </tr>
+              </thead>
+              <tbody id="transactionsTableBody">
+                <tr><td colspan="8" class="empty-state">No data available</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel logs-panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Machine Activity</p>
+              <h2>Recent Logs</h2>
+              <p>5 log terbaru dari /logs</p>
+            </div>
+          </div>
+          <div id="logsList" class="logs-list">
+            <div class="empty-state block">
+              <div class="empty-icon">i</div>
+              <strong>No logs available</strong>
+              <span>Aktivitas mesin akan muncul di sini.</span>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="restockModal" class="modal-backdrop" aria-hidden="true">
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="restockTitle">
+      <div class="modal-header">
+        <div>
+          <p class="section-kicker">Inventory Restock</p>
+          <h2 id="restockTitle">Restock Item</h2>
+        </div>
+        <button id="closeRestockModal" class="icon-button" type="button" aria-label="Close modal">x</button>
+      </div>
+
+      <form id="restockForm">
+        <input id="restockItemId" type="hidden">
+        <div class="restock-summary">
+          <div>
+            <span>Item</span>
+            <strong id="restockItemName">NONE</strong>
+          </div>
+          <div>
+            <span>Current Stock</span>
+            <strong id="restockCurrentStock">0</strong>
+          </div>
+        </div>
+
+        <label class="field-label" for="restockAmount">Jumlah restock</label>
+        <input id="restockAmount" class="number-input" type="number" min="1" step="1" placeholder="Contoh: 10" required>
+        <p id="restockError" class="form-error"></p>
+
+        <div class="modal-actions">
+          <button id="cancelRestock" class="secondary-button" type="button">Cancel</button>
+          <button id="submitRestock" class="primary-button" type="submit">Save Restock</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>
