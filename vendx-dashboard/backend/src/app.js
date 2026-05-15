@@ -18,6 +18,7 @@ const app = express();
 const defaultAllowedOrigins = [
   "https://vendx.site",
   "https://www.vendx.site",
+  "https://vendx-project.vercel.app",
   "http://localhost:5500",
   "http://127.0.0.1:5500",
   "https://vendx-project-m5guiudz1-zaky-maulana-s-projects.vercel.app"
