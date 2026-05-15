@@ -23,7 +23,7 @@ let machineId = "VM001";
 let latestItems = {};
 let toastTimer = null;
 
-const API_BASE_URL = "https://vendx-project-m5guiudz1-zaky-maulana-s-projects.vercel.app";
+const API_BASE_URL = "https://vendx-project.vercel.app";
 
 const restockModal = document.getElementById("restockModal");
 const restockForm = document.getElementById("restockForm");
