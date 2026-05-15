@@ -15,27 +15,44 @@ const { asyncHandler, sendError } = require("./utils/response");
 
 const app = express();
 
-const allowedOrigins = (process.env.CORS_ORIGIN || "")
+const defaultAllowedOrigins = [
+  "https://vendx.site",
+  "https://www.vendx.site",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "https://vendx-project-m5guiudz1-zaky-maulana-s-projects.vercel.app"
+];
+
+const allowedOrigins = (process.env.CORS_ORIGIN || defaultAllowedOrigins.join(","))
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(new Error(`CORS blocked origin: ${origin}`));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Accept", "Authorization"],
+  credentials: false,
+  optionsSuccessStatus: 204
+};
 
 // Security middleware
 app.use(helmet());
 
 // CORS middleware
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error("Not allowed by CORS"));
-    },
-  })
-);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // Body parser
 app.use(express.json({ limit: "1mb" }));
