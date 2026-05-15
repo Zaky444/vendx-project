@@ -4,17 +4,46 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VendX Monitoring Dashboard</title>
+  <link rel="icon" type="image/png" href="assets/vendx-logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/dashboard.css">
 </head>
 <body>
-  <div class="app-shell">
+  <div class="dashboard-layout">
+    <aside class="sidebar" aria-label="Dashboard sidebar">
+      <div class="sidebar-brand">
+        <img src="assets/vendx-logo.png" alt="VendX logo">
+        <div>
+          <strong>VendX</strong>
+          <span>Admin Monitoring</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <a class="nav-item active" href="#" aria-current="page"><span>D</span>Dashboard</a>
+        <a class="nav-item" href="#"><span>T</span>Transactions</a>
+        <a class="nav-item" href="#"><span>P</span>Products</a>
+        <a class="nav-item" href="#"><span>M</span>Machines</a>
+        <a class="nav-item" href="#"><span>I</span>Inventory</a>
+        <a class="nav-item" href="#"><span>L</span>Logs</a>
+        <a class="nav-item" href="#"><span>A</span>Analytics</a>
+        <a class="nav-item" href="#"><span>S</span>Settings</a>
+      </nav>
+
+      <div class="sidebar-status">
+        <span>System Status</span>
+        <strong><i></i>All Systems Operational</strong>
+      </div>
+    </aside>
+
+    <div class="content-shell">
+      <div class="app-shell">
     <header class="hero-header">
       <nav class="topbar" aria-label="Dashboard navigation">
         <div class="brand-block">
-          <div class="brand-mark">VX</div>
+          <div class="brand-mark"><img src="assets/vendx-logo.png" alt="" aria-hidden="true"></div>
           <div>
             <strong>VendX</strong>
             <span>Admin Monitoring</span>
@@ -203,6 +232,8 @@
         </article>
       </section>
     </main>
+      </div>
+    </div>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
