@@ -23,6 +23,8 @@ let machineId = "VM001";
 let latestItems = {};
 let toastTimer = null;
 
+const API_BASE_URL = "https://vendx-project-m5guiudz1-zaky-maulana-s-projects.vercel.app";
+
 const restockModal = document.getElementById("restockModal");
 const restockForm = document.getElementById("restockForm");
 const restockItemId = document.getElementById("restockItemId");
@@ -135,6 +137,35 @@ function canRestock() {
   return currentUser?.role === "admin" || currentUser?.role === "operator";
 }
 
+function canSimulatePayment() {
+  return currentUser?.role === "admin" || currentUser?.role === "operator";
+}
+
+async function simulatePaid(transactionId) {
+  const safeTransactionId = safeText(transactionId);
+
+  if (safeTransactionId === "NONE") {
+    showToast("Transaction ID tidak valid.", "error");
+    return;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/transactions/${encodeURIComponent(safeTransactionId)}/simulate-paid`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.success) {
+    throw result || new Error("Failed to simulate payment");
+  }
+
+  showToast("Payment berhasil disimulasikan.", "success");
+  return result;
+}
+
 function renderItems(items = {}) {
   latestItems = items || {};
   const tableBody = document.getElementById("itemsTableBody");
@@ -203,9 +234,24 @@ function renderCurrentOrder(order = {}) {
     return;
   }
 
+  const paymentState = safeText(order.payment_state).toUpperCase();
+  const transactionId = safeText(order.transaction_id);
+  const simulatePaidButton = canSimulatePayment() && paymentState === "WAITING_PAYMENT"
+    ? `
+      <div class="order-row">
+        <span>Action</span>
+        <span>
+          <button class="simulate-paid-button restock-button" type="button" data-simulate-paid-id="${escapeHtml(transactionId)}">
+            Simulate Paid
+          </button>
+        </span>
+      </div>
+    `
+    : "";
+
   container.innerHTML = `
     <div class="order-grid">
-      <div class="order-row"><span>Transaction ID</span><span>${escapeHtml(order.transaction_id)}</span></div>
+      <div class="order-row"><span>Transaction ID</span><span>${escapeHtml(transactionId)}</span></div>
       <div class="order-row"><span>Session ID</span><span>${escapeHtml(order.session_id)}</span></div>
       <div class="order-row"><span>Item ID</span><span>${escapeHtml(order.item_id)}</span></div>
       <div class="order-row"><span>Item Name</span><span>${escapeHtml(order.item_name)}</span></div>
@@ -213,6 +259,7 @@ function renderCurrentOrder(order = {}) {
       <div class="order-row"><span>Total Price</span><span>${formatRupiah(order.total_price)}</span></div>
       <div class="order-row"><span>Payment State</span><span>${createBadge(order.payment_state)}</span></div>
       <div class="order-row"><span>Order State</span><span>${createBadge(order.order_state)}</span></div>
+      ${simulatePaidButton}
     </div>
   `;
 }
@@ -439,6 +486,23 @@ function startDashboardListeners() {
 }
 
 document.addEventListener("click", (event) => {
+  const simulatePaidButton = event.target.closest("[data-simulate-paid-id]");
+  if (simulatePaidButton) {
+    const transactionId = simulatePaidButton.dataset.simulatePaidId;
+
+    simulatePaidButton.disabled = true;
+    simulatePaid(transactionId)
+      .catch((error) => {
+        console.error("Simulate paid failed", error);
+        showToast("Gagal simulasi pembayaran.", "error");
+      })
+      .finally(() => {
+        simulatePaidButton.disabled = false;
+      });
+
+    return;
+  }
+
   const restockButton = event.target.closest("[data-restock-id]");
   if (restockButton) {
     openRestockModal(restockButton.dataset.restockId);
