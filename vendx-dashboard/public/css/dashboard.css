@@ -563,6 +563,10 @@ table {
   border-collapse: collapse;
 }
 
+.lower-grid table {
+  min-width: 1080px;
+}
+
 th,
 td {
   padding: 15px 18px;
@@ -592,6 +596,10 @@ tbody tr:hover {
 
 td {
   color: var(--text-soft);
+}
+
+.lower-grid td {
+  white-space: nowrap;
 }
 
 .item-name {
@@ -634,6 +642,8 @@ td {
 .badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: max-content;
   max-width: 100%;
   min-height: 26px;
   padding: 5px 10px;
@@ -643,7 +653,9 @@ td {
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
-  overflow-wrap: anywhere;
+  line-height: 1;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .badge-online,
