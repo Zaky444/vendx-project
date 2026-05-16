@@ -23,8 +23,6 @@ let machineId = "VM001";
 let latestItems = {};
 let toastTimer = null;
 
-const API_BASE_URL = "https://api.vendx.site";
-
 const restockModal = document.getElementById("restockModal");
 const restockForm = document.getElementById("restockForm");
 const restockItemId = document.getElementById("restockItemId");
@@ -137,33 +135,9 @@ function canRestock() {
   return currentUser?.role === "admin" || currentUser?.role === "operator";
 }
 
-function canSimulatePayment() {
-  return currentUser?.role === "admin" || currentUser?.role === "operator";
-}
-
-async function simulatePaid(transactionId) {
-  const safeTransactionId = safeText(transactionId);
-
-  if (safeTransactionId === "NONE") {
-    showToast("Transaction ID tidak valid.", "error");
-    return;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/transactions/${encodeURIComponent(safeTransactionId)}/simulate-paid`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json"
-    }
-  });
-
-  const result = await response.json().catch(() => null);
-
-  if (!response.ok || !result?.success) {
-    throw result || new Error("Failed to simulate payment");
-  }
-
-  showToast("Payment berhasil disimulasikan.", "success");
-  return result;
+function isValidPaymentUrl(paymentUrl) {
+  const value = safeText(paymentUrl).trim();
+  return value !== "" && value.toUpperCase() !== "NONE";
 }
 
 function renderItems(items = {}) {
@@ -236,13 +210,18 @@ function renderCurrentOrder(order = {}) {
 
   const paymentState = safeText(order.payment_state).toUpperCase();
   const transactionId = safeText(order.transaction_id);
-  const simulatePaidButton = canSimulatePayment() && paymentState === "WAITING_PAYMENT"
+  const paymentUrl = safeText(order.payment_url);
+  const hasPaymentUrl = isValidPaymentUrl(paymentUrl);
+  const paymentUrlContent = hasPaymentUrl
+    ? `<a href="${escapeHtml(paymentUrl)}" target="_blank" rel="noopener noreferrer">Open Midtrans Payment</a>`
+    : "NONE";
+  const openPaymentButton = paymentState === "WAITING_PAYMENT" && hasPaymentUrl
     ? `
       <div class="order-row">
         <span>Action</span>
         <span>
-          <button class="simulate-paid-button restock-button" type="button" data-simulate-paid-id="${escapeHtml(transactionId)}">
-            Simulate Paid
+          <button class="open-payment-button restock-button" type="button" data-open-payment-url="${escapeHtml(paymentUrl)}">
+            Open Payment
           </button>
         </span>
       </div>
@@ -259,7 +238,8 @@ function renderCurrentOrder(order = {}) {
       <div class="order-row"><span>Total Price</span><span>${formatRupiah(order.total_price)}</span></div>
       <div class="order-row"><span>Payment State</span><span>${createBadge(order.payment_state)}</span></div>
       <div class="order-row"><span>Order State</span><span>${createBadge(order.order_state)}</span></div>
-      ${simulatePaidButton}
+      <div class="order-row"><span>Payment URL</span><span>${paymentUrlContent}</span></div>
+      ${openPaymentButton}
     </div>
   `;
 }
@@ -486,20 +466,16 @@ function startDashboardListeners() {
 }
 
 document.addEventListener("click", (event) => {
-  const simulatePaidButton = event.target.closest("[data-simulate-paid-id]");
-  if (simulatePaidButton) {
-    const transactionId = simulatePaidButton.dataset.simulatePaidId;
+  const openPaymentButton = event.target.closest("[data-open-payment-url]");
+  if (openPaymentButton) {
+    const paymentUrl = openPaymentButton.dataset.openPaymentUrl;
 
-    simulatePaidButton.disabled = true;
-    simulatePaid(transactionId)
-      .catch((error) => {
-        console.error("Simulate paid failed", error);
-        showToast("Gagal simulasi pembayaran.", "error");
-      })
-      .finally(() => {
-        simulatePaidButton.disabled = false;
-      });
+    if (!isValidPaymentUrl(paymentUrl)) {
+      showToast("Payment URL tidak tersedia.", "error");
+      return;
+    }
 
+    window.open(paymentUrl, "_blank", "noopener,noreferrer");
     return;
   }
 
