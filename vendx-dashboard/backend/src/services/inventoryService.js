@@ -32,18 +32,34 @@ async function assertAvailableItem(machineId, itemId, qty) {
 async function restockItem(machineId, itemId, qty, adminId = "UNKNOWN") {
   const amount = Number(qty);
 
-  if (!Number.isInteger(amount) || amount <= 0) {
-    const error = new Error("qty must be a positive integer");
+  if (!machineId || !itemId) {
+    const error = new Error("machineId and itemId are required");
     error.statusCode = 400;
+    throw error;
+  }
+
+  if (!Number.isInteger(amount) || amount <= 0) {
+    const error = new Error("amount must be a positive integer");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const item = await getItem(machineId, itemId);
+
+  if (!item) {
+    const error = new Error("Item not found");
+    error.statusCode = 404;
     throw error;
   }
 
   const stockRef = db.ref(`/machines/${machineId}/items/${itemId}/stock`);
   const oldSnapshot = await stockRef.once("value");
   const oldStock = Number(oldSnapshot.val()) || 0;
-  const newStock = oldStock + amount;
-
-  await stockRef.set(newStock);
+  const result = await stockRef.transaction((currentStock) => {
+    const stock = Number(currentStock) || 0;
+    return stock + amount;
+  });
+  const newStock = Number(result.snapshot.val()) || 0;
 
   await logService.createLog({
     machine_id: machineId,
@@ -53,7 +69,10 @@ async function restockItem(machineId, itemId, qty, adminId = "UNKNOWN") {
   });
 
   return {
+    machine_id: machineId,
     item_id: itemId,
+    added: amount,
+    stock_after: newStock,
     old_stock: oldStock,
     added_stock: amount,
     new_stock: newStock

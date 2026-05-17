@@ -3,7 +3,7 @@ const { sendSuccess } = require("../utils/response");
 
 async function listLogs(req, res) {
   const logs = await logService.listLogs(req.query);
-  return sendSuccess(res, logs, "Logs retrieved");
+  return sendSuccess(res, { logs }, "Logs fetched");
 }
 
 async function createLog(req, res) {

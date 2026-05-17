@@ -39,7 +39,7 @@ async function createTransaction(req, res) {
 
 async function listTransactions(req, res) {
   const transactions = await transactionService.listTransactions(req.query);
-  return sendSuccess(res, transactions, "Transactions retrieved");
+  return sendSuccess(res, { transactions }, "Transactions fetched");
 }
 
 async function submitDispenseResult(req, res) {

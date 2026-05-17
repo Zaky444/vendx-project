@@ -17,9 +17,10 @@ async function createLog({ machine_id, event, message, source = "BACKEND", times
   });
 }
 
-async function listLogs({ machine_id, limit = 10 } = {}) {
+async function listLogs({ machine_id, limit = 5 } = {}) {
   const logs = await getValue("/logs");
-  const maxLimit = Math.min(Number(limit) || 10, 100);
+  const requestedLimit = Number(limit) || 5;
+  const maxLimit = Math.min(Math.max(requestedLimit, 1), 50);
 
   return Object.entries(logs || {})
     .map(([id, value]) => ({ id, ...value }))

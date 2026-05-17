@@ -243,7 +243,8 @@ async function simulatePaid(transactionId) {
 
 async function listTransactions({ machine_id, limit = 5, status } = {}) {
   const transactions = await firebaseService.getValue("/transactions");
-  const maxLimit = Math.min(Number(limit) || 5, 100);
+  const requestedLimit = Number(limit) || 5;
+  const maxLimit = Math.min(Math.max(requestedLimit, 1), 50);
 
   return Object.values(transactions || {})
     .filter((transaction) => !machine_id || transaction.machine_id === machine_id)
