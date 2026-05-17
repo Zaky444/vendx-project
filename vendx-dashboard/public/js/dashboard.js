@@ -1,10 +1,3 @@
-import {
-  onValue,
-  push,
-  ref,
-  runTransaction,
-  set
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 import { logoutUser, requireAuth } from "./auth-guard.js";
 import {
   escapeHtml,
@@ -17,11 +10,14 @@ import {
   setText
 } from "./utils.js";
 
-let database = null;
 let currentUser = null;
 let machineId = "VM001";
 let latestItems = {};
 let toastTimer = null;
+let dashboardPollingTimer = null;
+let dashboardLoadErrorShown = false;
+
+const API_BASE_URL = "https://api.vendx.site";
 
 const restockModal = document.getElementById("restockModal");
 const restockForm = document.getElementById("restockForm");
@@ -49,6 +45,38 @@ function showToast(message, type = "success") {
   toastTimer = setTimeout(() => {
     toast.className = "toast";
   }, 3200);
+}
+
+async function apiRequest(endpoint, options = {}) {
+  const headers = {
+    Accept: "application/json",
+    ...(options.headers || {})
+  };
+
+  const requestOptions = {
+    ...options,
+    headers
+  };
+
+  if (requestOptions.body && typeof requestOptions.body !== "string") {
+    requestOptions.body = JSON.stringify(requestOptions.body);
+    requestOptions.headers = {
+      ...requestOptions.headers,
+      "Content-Type": "application/json"
+    };
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, requestOptions);
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.success) {
+    const error = new Error(result?.message || "Backend request failed");
+    error.status = response.status;
+    error.details = result?.details || null;
+    throw error;
+  }
+
+  return result.data;
 }
 
 function setRealtimeState(message, isConnected = true) {
@@ -87,11 +115,11 @@ function renderUserProfile(user) {
   const orderPathLabel = document.getElementById("orderPathLabel");
 
   if (itemsPathLabel) {
-    itemsPathLabel.textContent = `Data produk dari machines/${machineId}/items`;
+    itemsPathLabel.textContent = `Data produk dari Backend API /api/machines/${machineId}/items`;
   }
 
   if (orderPathLabel) {
-    orderPathLabel.textContent = `Order aktif dari machines/${machineId}/current_order`;
+    orderPathLabel.textContent = `Order aktif dari Backend API /api/machines/${machineId}/current-order`;
   }
 }
 
@@ -138,6 +166,14 @@ function canRestock() {
 function isValidPaymentUrl(paymentUrl) {
   const value = safeText(paymentUrl).trim();
   return value !== "" && value.toUpperCase() !== "NONE";
+}
+
+function normalizeList(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  return Object.values(data || {});
 }
 
 function renderItems(items = {}) {
@@ -210,10 +246,11 @@ function renderCurrentOrder(order = {}) {
 
   const paymentState = safeText(order.payment_state).toUpperCase();
   const transactionId = safeText(order.transaction_id);
-  const paymentUrl = safeText(order.payment_url);
+  const primaryPaymentUrl = isValidPaymentUrl(order.payment_url) ? order.payment_url : order.qr_url;
+  const paymentUrl = safeText(primaryPaymentUrl);
   const hasPaymentUrl = isValidPaymentUrl(paymentUrl);
   const paymentUrlContent = hasPaymentUrl
-    ? `<a href="${escapeHtml(paymentUrl)}" target="_blank" rel="noopener noreferrer">Open Midtrans Payment</a>`
+    ? `<a href="${escapeHtml(paymentUrl)}" target="_blank" rel="noopener noreferrer">${safeText(order.payment_method).toLowerCase() === "qris" ? "Open QRIS URL" : "Open Midtrans Payment"}</a>`
     : "NONE";
   const openPaymentButton = paymentState === "WAITING_PAYMENT" && hasPaymentUrl
     ? `
@@ -236,8 +273,10 @@ function renderCurrentOrder(order = {}) {
       <div class="order-row"><span>Item Name</span><span>${escapeHtml(order.item_name)}</span></div>
       <div class="order-row"><span>Quantity</span><span>${Number(order.qty) || 0}</span></div>
       <div class="order-row"><span>Total Price</span><span>${formatRupiah(order.total_price)}</span></div>
+      <div class="order-row"><span>Payment Method</span><span>${escapeHtml(order.payment_method)}</span></div>
       <div class="order-row"><span>Payment State</span><span>${createBadge(order.payment_state)}</span></div>
       <div class="order-row"><span>Order State</span><span>${createBadge(order.order_state)}</span></div>
+      <div class="order-row"><span>Dispense Result</span><span>${createBadge(order.dispense_result)}</span></div>
       <div class="order-row"><span>Payment URL</span><span>${paymentUrlContent}</span></div>
       ${openPaymentButton}
     </div>
@@ -297,7 +336,7 @@ function isThisMonth(timestamp) {
 }
 
 function calculateAnalytics(transactions = {}) {
-  const visibleSuccessfulTransactions = Object.values(transactions || {})
+  const visibleSuccessfulTransactions = normalizeList(transactions)
     .filter((transaction) => canSeeMachine(transaction?.machine_id))
     .filter(isSuccessfulTransaction);
 
@@ -332,7 +371,7 @@ function renderTransactions(transactions = {}) {
     return;
   }
 
-  const rows = Object.values(transactions || {})
+  const rows = normalizeList(transactions)
     .filter((transaction) => canSeeMachine(transaction?.machine_id))
     .sort(sortNewestFirst)
     .slice(0, 5)
@@ -360,7 +399,7 @@ function renderLogs(logs = {}) {
     return;
   }
 
-  const rows = Object.values(logs || {})
+  const rows = normalizeList(logs)
     .filter((log) => canSeeMachine(log?.machine_id))
     .sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0))
     .slice(0, 5)
@@ -412,57 +451,64 @@ function closeRestockModal() {
   restockModal.setAttribute("aria-hidden", "true");
 }
 
-async function writeRestockLog(itemId, amount) {
-  const logRef = push(ref(database, "/logs"));
-  await set(logRef, {
-    machine_id: machineId,
-    event: "STOCK_RESTOCK",
-    message: `Restocked ${itemId} by ${amount} units`,
-    timestamp: Date.now()
-  });
-}
-
 async function restockItem(itemId, amount) {
-  const stockRef = ref(database, `/machines/${machineId}/items/${itemId}/stock`);
-
-  await runTransaction(stockRef, (currentStock) => {
-    const stock = Number(currentStock) || 0;
-    return stock + amount;
-  });
-
-  await writeRestockLog(itemId, amount);
-}
-
-function listenToPath(path, renderer) {
-  onValue(
-    ref(database, path),
-    (snapshot) => {
-      renderer(snapshot.val() || {});
-      setRealtimeState("Realtime connected", true);
-    },
-    (error) => {
-      console.error(`Firebase listener failed for ${path}`, error);
-      setRealtimeState("Firebase listener error", false);
+  await apiRequest(`/api/machines/${machineId}/items/${encodeURIComponent(itemId)}/restock`, {
+    method: "POST",
+    body: {
+      amount
     }
-  );
+  });
 }
 
-function startDashboardListeners() {
-  const paths = {
-    info: `/machines/${machineId}/info`,
-    status: `/machines/${machineId}/status`,
-    items: `/machines/${machineId}/items`,
-    currentOrder: `/machines/${machineId}/current_order`,
-    transactions: "/transactions",
-    logs: "/logs"
-  };
+async function loadMachineInfo() {
+  try {
+    const overview = await apiRequest(`/api/machines/${machineId}/overview`);
+    renderInfo(overview.info || {});
+  } catch (error) {
+    console.warn("Machine info unavailable from backend overview", error);
+  }
+}
 
-  listenToPath(paths.info, renderInfo);
-  listenToPath(paths.status, renderStatus);
-  listenToPath(paths.items, renderItems);
-  listenToPath(paths.currentOrder, renderCurrentOrder);
-  listenToPath(paths.transactions, renderTransactions);
-  listenToPath(paths.logs, renderLogs);
+async function loadDashboardData() {
+  try {
+    const [itemsData, statusData, currentOrder, transactionsData, logsData] = await Promise.all([
+      apiRequest(`/api/machines/${machineId}/items`),
+      apiRequest(`/api/machines/${machineId}/status`),
+      apiRequest(`/api/machines/${machineId}/current-order`),
+      apiRequest(`/api/transactions?machine_id=${encodeURIComponent(machineId)}&limit=5`),
+      apiRequest(`/api/logs?machine_id=${encodeURIComponent(machineId)}&limit=5`)
+    ]);
+
+    renderItems(itemsData.items || {});
+    renderStatus(statusData.status || {});
+    renderCurrentOrder(currentOrder || {});
+    renderTransactions(transactionsData.transactions || []);
+    renderLogs(logsData.logs || []);
+    setRealtimeState("Backend connected", true);
+    dashboardLoadErrorShown = false;
+  } catch (error) {
+    console.error("Dashboard data load failed", error);
+    setRealtimeState("Backend connection error", false);
+
+    if (!dashboardLoadErrorShown) {
+      showToast("Gagal memuat data dashboard.", "error");
+      dashboardLoadErrorShown = true;
+    }
+  }
+}
+
+function startDashboardPolling() {
+  stopDashboardPolling();
+  loadMachineInfo();
+  loadDashboardData();
+  dashboardPollingTimer = setInterval(loadDashboardData, 3000);
+}
+
+function stopDashboardPolling() {
+  if (dashboardPollingTimer) {
+    clearInterval(dashboardPollingTimer);
+    dashboardPollingTimer = null;
+  }
 }
 
 document.addEventListener("click", (event) => {
@@ -510,11 +556,12 @@ restockForm?.addEventListener("submit", async (event) => {
     submitRestock.disabled = true;
     restockError.textContent = "";
     await restockItem(itemId, amount);
+    await loadDashboardData();
     closeRestockModal();
     showToast(`Stok ${itemId} berhasil ditambah ${amount} unit.`, "success");
   } catch (error) {
     console.error("Restock failed", error);
-    restockError.textContent = "Restock gagal. Periksa koneksi dan rules Firebase.";
+    restockError.textContent = "Restock gagal. Periksa koneksi Backend API.";
     showToast("Restock gagal disimpan.", "error");
   } finally {
     submitRestock.disabled = false;
@@ -524,6 +571,7 @@ restockForm?.addEventListener("submit", async (event) => {
 const logoutButton = document.getElementById("logoutButton");
 if (logoutButton) {
   logoutButton.addEventListener("click", async () => {
+    stopDashboardPolling();
     await logoutUser();
   });
 }
@@ -533,15 +581,14 @@ setInterval(updateClock, 30000);
 
 try {
   const session = await requireAuth();
-  database = session.database;
   currentUser = session.user;
   machineId = safeText(currentUser.assigned_machine);
   renderUserProfile(currentUser);
-  setRealtimeState("Listening to Firebase", true);
-  startDashboardListeners();
+  setRealtimeState("Connecting to Backend API", true);
+  startDashboardPolling();
 } catch (error) {
   if (error?.message !== "FIREBASE_CONFIG_REQUIRED") {
     console.error("Dashboard initialization failed", error);
   }
-  setRealtimeState("Firebase config required", false);
+  setRealtimeState("Dashboard auth failed", false);
 }
