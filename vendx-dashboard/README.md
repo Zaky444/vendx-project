@@ -1,80 +1,111 @@
 # VendX Monitoring Dashboard + Backend API
 
-VendX adalah sistem vending machine IoT berbasis ESP32, Firebase Realtime Database, dashboard monitoring admin, dan backend Node.js + Express untuk transaksi dan Midtrans Sandbox.
+VendX adalah sistem vending machine IoT berbasis ESP32, Backend API Node.js/Express di Vercel, Firebase Realtime Database, Dashboard Web, dan Midtrans Sandbox dengan dukungan Snap dan QRIS.
 
-Dashboard tetap hanya untuk monitoring dan restock admin/operator. Pembelian user tetap dilakukan dari ESP32/LCD.
+Dashboard digunakan untuk monitoring admin/operator dan restock. Pembelian user tetap dilakukan dari ESP32/LCD pada mesin vending.
 
-## Arsitektur Target
+## Arsitektur
 
 ```text
-ESP32/LCD
--> Backend Node.js + Express
--> Midtrans Sandbox
--> Firebase Realtime Database
--> Dashboard Monitoring
+ESP32/LCD -> Backend API -> Firebase Realtime Database
+Dashboard -> Backend API -> Firebase Realtime Database
+Midtrans -> Backend Webhook -> Firebase Realtime Database
 ```
 
-Backend diperlukan karena Midtrans Server Key dan Firebase Admin SDK tidak boleh berada di ESP32 atau frontend. Backend juga menjadi tempat validasi stok, pembuatan transaksi, callback pembayaran, dispense result, restock aman, dan audit log.
+Backend API final:
+
+```text
+https://api.vendx.site
+```
+
+Website dashboard:
+
+```text
+https://www.vendx.site
+```
+
+Backend diperlukan karena Midtrans Server Key dan Firebase Admin SDK tidak boleh berada di ESP32 atau frontend. Backend menjadi pusat validasi item, stok, harga, transaksi, payment timeout, webhook Midtrans, command untuk ESP32, dispense result, restock, dan audit log.
 
 ## Struktur Project
 
 ```text
 vendx-dashboard/
-├── public/
-│   ├── login.html
-│   ├── index.html
-│   ├── css/
-│   └── js/
-├── backend/
-│   ├── package.json
-│   ├── vercel.json
-│   ├── .env.example
-│   ├── api/
-│   │   └── index.js
-│   └── src/
-│       ├── app.js
-│       ├── server.js
-│       ├── config/
-│       │   ├── firebaseAdmin.js
-│       │   └── midtrans.js
-│       ├── routes/
-│       ├── controllers/
-│       ├── services/
-│       └── utils/
-├── database.json
-├── database.rules.json
-└── README.md
+|-- public/
+|   |-- login.html
+|   |-- index.html
+|   |-- assets/
+|   |   `-- vendx-logo.png
+|   |-- css/
+|   |   |-- auth.css
+|   |   `-- dashboard.css
+|   `-- js/
+|       |-- auth.js
+|       |-- auth-guard.js
+|       |-- dashboard.js
+|       |-- firebase-config.js
+|       `-- utils.js
+|-- backend/
+|   |-- package.json
+|   |-- vercel.json
+|   |-- .env.example
+|   |-- api/
+|   |   `-- index.js
+|   `-- src/
+|       |-- app.js
+|       |-- server.js
+|       |-- config/
+|       |   |-- firebaseAdmin.js
+|       |   `-- midtrans.js
+|       |-- controllers/
+|       |-- routes/
+|       |-- services/
+|       `-- utils/
+|-- database.json
+|-- database.rules.json
+`-- README.md
 ```
 
-## Firebase Rules
+## Dashboard
 
-Rules baru ada di `database.rules.json`.
+Dashboard utama sudah mengambil data monitoring lewat Backend API, bukan Firebase Realtime Database listener langsung.
 
-Ringkasan:
+Endpoint yang dipakai dashboard:
 
-- `users`: user login hanya membaca dirinya sendiri. `last_login` boleh diupdate oleh user sendiri. Field asing ditolak.
-- `machines/info`: admin login boleh update metadata mesin. Field wajib divalidasi.
-- `machines/status`: ESP32 development masih boleh menulis status, tetapi field dan enum divalidasi.
-- `machines/items`: admin/operator boleh restock/update item. `stock`, `price`, dan `slot_number` tidak boleh minus.
-- `machines/current_order`: ESP32/backend development boleh update order aktif, termasuk `qr_url`, `payment_url`, dan `expired_at`, dengan validasi.
-- `transactions`: write per transaksi masih dibuka untuk sandbox/dev, tetapi tidak bebas root dan semua field divalidasi, termasuk Midtrans fields.
-- `logs`: write per log masih dibuka untuk sandbox/dev, tetapi wajib punya `machine_id`, `event`, `message`, `source`, dan `timestamp`.
+```http
+GET  /api/machines/:machineId/overview
+GET  /api/machines/:machineId/items
+GET  /api/machines/:machineId/status
+GET  /api/machines/:machineId/current-order
+GET  /api/transactions?machine_id=:machineId&limit=5
+GET  /api/logs?machine_id=:machineId&limit=5
+POST /api/machines/:machineId/items/:itemId/restock
+```
 
-Bagian yang masih development/sandbox:
+`public/js/dashboard.js` menggunakan:
 
-- `machines/status`, `machines/current_order`, `transactions/$transactionId`, dan `logs/$logId` masih mengizinkan write tanpa Firebase Auth agar ESP32 lama tetap bisa testing.
-- Untuk production, ESP32 sebaiknya menulis lewat backend API atau token khusus. Firebase client write langsung harus dipersempit.
+```js
+const API_BASE_URL = "https://api.vendx.site";
+```
 
-## Menjalankan Backend
+Data dashboard dimuat dengan polling sederhana setiap 3 detik. Restock juga lewat Backend API, sehingga frontend tidak lagi mengubah stok atau menulis log langsung ke Firebase.
+
+Catatan auth:
+
+- Login masih memakai Firebase Authentication.
+- `auth.js` dan `auth-guard.js` masih membaca `/users/{uid}` untuk validasi role, `is_active`, dan `assigned_machine`.
+- Ini hanya untuk autentikasi dashboard. Data monitoring utama sudah lewat backend.
+
+## Backend Environment
+
+Buat file `.env` dari contoh:
 
 ```bash
 cd vendx-dashboard/backend
 npm install
 copy .env.example .env
-npm run dev
 ```
 
-Isi `.env`:
+Isi utama:
 
 ```env
 PORT=5000
@@ -84,12 +115,20 @@ FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-proje
 MIDTRANS_IS_PRODUCTION=false
 MIDTRANS_SERVER_KEY=SB-Mid-server-xxxxxxxx
 MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxxxxxx
-PAYMENT_TIMEOUT_MS=900000
+PAYMENT_TIMEOUT_MS=120000
 
-CORS_ORIGIN=http://localhost:5500,http://localhost:5501
+CORS_ORIGIN=https://vendx.site,https://www.vendx.site,http://localhost:5500,http://127.0.0.1:5500
 ```
 
-Untuk Vercel, pasang environment variable yang sama di Project Settings. Jangan upload `.env`, `serviceAccountKey.json`, `firebase-service-account.json`, atau Midtrans Server Key ke GitHub. Firebase private key di `FIREBASE_SERVICE_ACCOUNT_JSON` harus memakai newline escaped (`\\n`), dan backend akan mengubahnya menjadi newline asli.
+Jangan upload `.env`, service account JSON, atau Midtrans Server Key ke GitHub. Untuk Vercel, pasang environment variable yang sama di Project Settings. `FIREBASE_SERVICE_ACCOUNT_JSON` harus memakai newline escaped (`\\n`).
+
+## Menjalankan Backend Lokal
+
+```bash
+cd vendx-dashboard/backend
+npm install
+npm run dev
+```
 
 Health check:
 
@@ -97,34 +136,132 @@ Health check:
 GET http://localhost:5000/health
 ```
 
-## Endpoint API
-
-### Machine Overview
-
-```http
-GET /api/machines/VM001/overview
-```
-
 Response:
 
 ```json
 {
   "success": true,
-  "message": "Machine overview retrieved",
+  "message": "VendX backend is healthy",
+  "timestamp": 1778890000000
+}
+```
+
+## Deploy Backend ke Vercel
+
+Backend berjalan sebagai REST API serverless.
+
+Entrypoint Vercel:
+
+```text
+backend/api/index.js
+```
+
+`src/app.js` mengekspor Express app. `src/server.js` hanya untuk development lokal. Backend tidak memakai Firebase listener permanen, worker, atau `setInterval` jangka panjang.
+
+## Endpoint Backend
+
+### Machine Data
+
+```http
+GET /api/machines/VM001/overview
+GET /api/machines/VM001/items
+GET /api/machines/VM001/items/cola
+GET /api/machines/VM001/status
+PATCH /api/machines/VM001/status
+GET /api/machines/VM001/current-order
+```
+
+Update status mesin dari ESP32:
+
+```http
+PATCH /api/machines/VM001/status
+Content-Type: application/json
+
+{
+  "connection": "ONLINE",
+  "machine_state": "IDLE",
+  "is_busy": false,
+  "dispense_result": "NONE"
+}
+```
+
+Backend otomatis menambahkan `last_update` dan `last_updated`.
+
+### Machine Command untuk ESP32
+
+ESP32 dapat polling:
+
+```http
+GET /api/machines/VM001/command
+```
+
+Command yang mungkin dikembalikan:
+
+```text
+IDLE
+WAIT_PAYMENT
+DISPENSE
+PAYMENT_TIMEOUT
+COMPLETED
+DISPENSE_FAILED
+NEEDS_REVIEW
+DISPENSING
+```
+
+Contoh response saat siap dispense:
+
+```json
+{
+  "success": true,
+  "message": "Machine command fetched",
   "data": {
-    "info": {},
-    "status": {},
-    "items": {},
-    "current_order": {}
+    "machine_id": "VM001",
+    "command": "DISPENSE",
+    "transaction_id": "TRX...",
+    "item_id": "cola",
+    "item_name": "Cola",
+    "payment_state": "PAID",
+    "order_state": "READY_TO_DISPENSE"
   }
 }
 ```
 
-### Machine Items
+Endpoint command tidak mengurangi stok dan tidak mengubah `dispense_result`.
+
+### Machine Events dari ESP32
 
 ```http
-GET /api/machines/VM001/items
+POST /api/machines/VM001/events
+Content-Type: application/json
 ```
+
+Event yang didukung:
+
+```json
+{ "event": "ONLINE" }
+```
+
+```json
+{ "event": "ITEM_SELECTED", "item_id": "cola" }
+```
+
+```json
+{ "event": "QR_DISPLAYED", "transaction_id": "TRX..." }
+```
+
+```json
+{ "event": "DISPENSE_STARTED", "transaction_id": "TRX..." }
+```
+
+```json
+{ "event": "PAYMENT_TIMEOUT_ACK", "transaction_id": "TRX..." }
+```
+
+```json
+{ "event": "ERROR", "message": "Sensor error" }
+```
+
+`DISPENSE_STARTED` hanya mengubah state menjadi `DISPENSING`. Hasil akhir dispense tetap dikirim ke endpoint `dispense-result`.
 
 ### Create Transaction
 
@@ -135,54 +272,176 @@ Content-Type: application/json
 {
   "machine_id": "VM001",
   "item_id": "cola",
-  "qty": 1
+  "qty": 1,
+  "payment_method": "qris"
 }
 ```
 
-Backend akan validasi mesin, item aktif, stok cukup, hitung harga, membuat transaksi Firebase, membuat Midtrans Snap payment, dan update `/machines/{machineId}/current_order`. Stok belum dikurangi.
+`payment_method` mendukung:
 
-Response:
+```text
+snap
+qris
+```
+
+Jika `payment_method` tidak dikirim, default adalah `snap`.
+
+Backend akan:
+
+- validasi `machine_id`, `item_id`, `qty`, dan `payment_method`
+- membaca item dari `/machines/{machine_id}/items/{item_id}`
+- validasi `is_active`
+- validasi stok cukup
+- validasi harga valid
+- menghitung `total_price`
+- membuat `transaction_id`
+- membuat payment Midtrans Snap atau QRIS
+- menyimpan `/transactions/{transaction_id}`
+- menyimpan `/machines/{machine_id}/current_order`
+- menyimpan `payment_expired_at`
+
+Stok tidak dikurangi saat transaksi dibuat.
+
+Contoh response QRIS:
+
+```json
+{
+  "success": true,
+  "message": "QRIS payment created",
+  "data": {
+    "transaction_id": "TRX...",
+    "machine_id": "VM001",
+    "item_id": "cola",
+    "item_name": "Cola",
+    "qty": 1,
+    "price": 5000,
+    "total_price": 5000,
+    "payment_method": "qris",
+    "payment_url": "NONE",
+    "qr_url": "https://...",
+    "qr_string": "000201...",
+    "snap_token": "NONE",
+    "payment_state": "WAITING_PAYMENT",
+    "order_state": "WAITING_PAYMENT",
+    "payment_expired_at": 1778890120000
+  }
+}
+```
+
+Contoh response Snap:
 
 ```json
 {
   "success": true,
   "message": "Transaction and Midtrans payment created",
   "data": {
-    "transaction_id": "TRX001",
+    "transaction_id": "TRX...",
+    "machine_id": "VM001",
+    "item_id": "cola",
+    "item_name": "Cola",
+    "qty": 1,
+    "price": 5000,
+    "total_price": 5000,
+    "payment_method": "snap",
+    "payment_url": "https://app.sandbox.midtrans.com/snap/v4/redirection/...",
+    "qr_url": "https://app.sandbox.midtrans.com/snap/v4/redirection/...",
+    "qr_string": "NONE",
     "snap_token": "MIDTRANS_SNAP_TOKEN",
-    "payment_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/...",
-    "qr_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/...",
-    "payment_state": "WAITING_PAYMENT"
+    "payment_state": "WAITING_PAYMENT",
+    "order_state": "WAITING_PAYMENT",
+    "payment_expired_at": 1778890120000
   }
 }
 ```
 
-### Polling Payment Status
+Error validasi memakai `code`, misalnya:
 
-```http
-GET /api/transactions/TRX001/status
+```json
+{
+  "success": false,
+  "code": "OUT_OF_STOCK",
+  "message": "Insufficient stock",
+  "details": {
+    "machine_id": "VM001",
+    "item_id": "cola",
+    "item_name": "Cola",
+    "stock": 0,
+    "qty": 1
+  }
+}
 ```
 
-ESP32 memakai endpoint ini untuk polling. Jika pembayaran sudah melewati `expired_at`, backend akan menandai `payment_state` dan `order_state` sebagai `PAYMENT_TIMEOUT` tanpa mengubah `dispense_result`.
+Code yang dipakai:
 
-### Midtrans Notification
-
-```http
-POST /api/payments/midtrans/notification
+```text
+VALIDATION_ERROR
+MACHINE_NOT_FOUND
+ITEM_NOT_FOUND
+ITEM_INACTIVE
+OUT_OF_STOCK
+INVALID_PRICE
+MIDTRANS_ERROR
 ```
 
-URL ini didaftarkan di dashboard Midtrans Sandbox sebagai Payment Notification URL. Backend memverifikasi notification lewat Midtrans client, lalu update transaksi dan `current_order`.
+### Transaction Status
 
-Endpoint Vercel-friendly:
+```http
+GET /api/transactions/TRX.../status
+```
+
+Endpoint ini juga menjalankan payment timeout check. Jika transaksi melewati `payment_expired_at` dan masih `WAITING_PAYMENT`, backend mengubah:
+
+```text
+payment_state = PAYMENT_TIMEOUT
+order_state = PAYMENT_TIMEOUT
+status = PAYMENT_TIMEOUT
+dispense_result tetap NONE
+```
+
+Payment timeout tidak pernah menjadi `DISPENSE_FAILED`.
+
+### Midtrans Webhook
+
+Endpoint utama:
 
 ```http
 POST /midtrans/notification
 ```
 
+Endpoint kompatibel:
+
+```http
+POST /api/payments/midtrans/notification
+```
+
+Webhook menggunakan `order_id` dari Midtrans untuk mencari `/transactions/{order_id}`.
+
+Mapping normal:
+
+```text
+settlement -> PAID / READY_TO_DISPENSE
+capture + fraud_status accept -> PAID / READY_TO_DISPENSE
+pending -> WAITING_PAYMENT
+expire -> EXPIRED / PAYMENT_EXPIRED
+cancel/deny/failure -> FAILED / PAYMENT_FAILED
+```
+
+Late payment:
+
+Jika transaksi sudah `PAYMENT_TIMEOUT`, lalu webhook settlement/capture datang, backend mengubah:
+
+```text
+payment_state = LATE_PAID
+order_state = NEEDS_REVIEW
+status = NEEDS_REVIEW
+```
+
+Late payment tidak memberi command `DISPENSE`, tidak mengurangi stok, dan tidak mengubah `dispense_result`.
+
 ### Dispense Result
 
 ```http
-POST /api/transactions/TRX001/dispense-result
+POST /api/transactions/TRX.../dispense-result
 Content-Type: application/json
 
 {
@@ -191,32 +450,20 @@ Content-Type: application/json
 }
 ```
 
-Jika `SUCCESS`, backend mengurangi stok, set transaksi `COMPLETED`, set `current_order.order_state = COMPLETED`, update status mesin, dan membuat log `DISPENSE_SUCCESS`.
+Jika `SUCCESS`:
 
-Jika `FAILED`, backend set transaksi `DISPENSE_FAILED`, set `current_order.order_state = DISPENSE_FAILED`, stok tidak dikurangi, dan log `DISPENSE_FAILED` dibuat.
+- stok item dikurangi memakai Firebase transaction
+- transaksi menjadi `COMPLETED`
+- `current_order.order_state = COMPLETED`
+- log `DISPENSE_SUCCESS`
 
-## Deploy ke Vercel
+Jika `FAILED`:
 
-Backend memakai REST API serverless. Vercel entrypoint ada di:
+- stok tidak dikurangi
+- transaksi menjadi `DISPENSE_FAILED`
+- log `DISPENSE_FAILED`
 
-```text
-backend/api/index.js
-```
-
-`src/app.js` hanya export Express app. `src/server.js` hanya untuk local development dan tidak dipakai Vercel.
-
-Environment variables di Vercel:
-
-```text
-FIREBASE_DATABASE_URL
-FIREBASE_SERVICE_ACCOUNT_JSON
-MIDTRANS_SERVER_KEY
-MIDTRANS_CLIENT_KEY
-PAYMENT_TIMEOUT_MS
-MIDTRANS_IS_PRODUCTION=false
-```
-
-Tidak ada Firebase listener permanen, worker, atau `setInterval` jangka panjang di backend.
+Endpoint ini hanya boleh diproses jika `payment_state = PAID`.
 
 ### Restock
 
@@ -225,8 +472,7 @@ POST /api/machines/VM001/items/cola/restock
 Content-Type: application/json
 
 {
-  "qty": 10,
-  "admin_id": "admin001"
+  "amount": 10
 }
 ```
 
@@ -235,8 +481,12 @@ Response:
 ```json
 {
   "success": true,
+  "message": "Item restocked",
   "data": {
+    "machine_id": "VM001",
     "item_id": "cola",
+    "added": 10,
+    "stock_after": 20,
     "old_stock": 10,
     "added_stock": 10,
     "new_stock": 20
@@ -244,10 +494,12 @@ Response:
 }
 ```
 
+Backend membuat log `STOCK_RESTOCK`. Dashboard tidak lagi menulis log langsung ke Firebase.
+
 ### Logs
 
 ```http
-GET /api/logs?machine_id=VM001&limit=10
+GET /api/logs?machine_id=VM001&limit=5
 ```
 
 ```http
@@ -271,56 +523,149 @@ GET /api/transactions?machine_id=VM001&status=COMPLETED&limit=10
 
 Data diurutkan dari `updated_at` atau `created_at` terbaru ke terlama.
 
-## Cara Test Postman / Thunder Client
-
-1. Jalankan backend: `npm run dev`.
-2. Test `GET /health`.
-3. Test `GET /api/machines/VM001/overview`.
-4. Test `POST /api/transactions` dengan `machine_id`, `item_id`, dan `qty`.
-5. Copy `transaction_id` dari response.
-6. Test `POST /api/payments/midtrans/create`.
-7. Buka `payment_url` dari response untuk simulasi pembayaran Sandbox.
-8. Test callback manual dengan payload Midtrans Sandbox atau gunakan notification URL dari Midtrans.
-9. Test `POST /api/transactions/:transactionId/dispense-result`.
-10. Cek Firebase dan dashboard.
-
-## Menghubungkan ESP32 ke Backend
-
-ESP32 tidak perlu menulis transaksi langsung ke Firebase lagi. Gunakan HTTP request:
+## Alur Pembelian
 
 ```text
-POST http://BACKEND_HOST:5000/api/transactions
-POST http://BACKEND_HOST:5000/api/payments/midtrans/create
-POST http://BACKEND_HOST:5000/api/transactions/{transactionId}/dispense-result
-POST http://BACKEND_HOST:5000/api/logs
-```
-
-Untuk development lokal dari ESP32 fisik, backend harus memakai IP laptop di jaringan yang sama, contoh:
-
-```text
-http://192.168.1.10:5000/api/transactions
-```
-
-## Dashboard dan Backend
-
-Tahap sekarang dashboard masih boleh membaca Firebase realtime untuk monitoring. Setelah backend stabil:
-
-- Restock dashboard sebaiknya diarahkan ke `POST /api/machines/:machineId/items/:itemId/restock`.
-- Monitoring boleh tetap realtime dari Firebase.
-- Untuk production, dashboard bisa memakai API + auth middleware agar akses lebih terkendali.
-
-## Alur Pembelian Target
-
-```text
-ESP32 memilih produk
-POST /api/transactions
-POST /api/payments/midtrans/create
-ESP32 menampilkan payment_url / qr_url
+ESP32 menampilkan produk
+User memilih produk di LCD/tombol ESP32
+ESP32 POST /api/transactions
+Backend validasi item, stok, harga, dan is_active
+Backend membuat payment Snap/QRIS Midtrans
+Backend menyimpan transaction dan current_order ke Firebase
+ESP32 menampilkan payment_url / qr_url / qr_string
 User membayar via Midtrans Sandbox
-Midtrans callback ke backend
-Backend set payment_state = PAID dan status = READY_TO_DISPENSE
-ESP32 menjalankan servo
-ESP32 kirim dispense result
-Backend update stok, transaksi, current_order, status mesin, dan logs
-Dashboard melihat perubahan
+Midtrans webhook ke backend
+Backend set PAID / READY_TO_DISPENSE
+ESP32 polling /api/machines/{machineId}/command atau /api/transactions/{transactionId}/status
+Jika command DISPENSE, ESP32 menjalankan servo
+ESP32 membaca sensor barang
+ESP32 POST /api/transactions/{transactionId}/dispense-result
+Backend update transaksi, stok, current_order, status mesin, dan logs
+Dashboard membaca data terbaru dari Backend API
 ```
+
+## Cara Test Thunder Client
+
+1. Health:
+
+```http
+GET https://api.vendx.site/health
+```
+
+2. Items:
+
+```http
+GET https://api.vendx.site/api/machines/VM001/items
+```
+
+3. Buat transaksi QRIS:
+
+```http
+POST https://api.vendx.site/api/transactions
+Content-Type: application/json
+
+{
+  "machine_id": "VM001",
+  "item_id": "cola",
+  "qty": 1,
+  "payment_method": "qris"
+}
+```
+
+4. Cek command:
+
+```http
+GET https://api.vendx.site/api/machines/VM001/command
+```
+
+5. Cek status:
+
+```http
+GET https://api.vendx.site/api/transactions/TRX.../status
+```
+
+6. Kirim event dispense started:
+
+```http
+POST https://api.vendx.site/api/machines/VM001/events
+Content-Type: application/json
+
+{
+  "event": "DISPENSE_STARTED",
+  "transaction_id": "TRX..."
+}
+```
+
+7. Kirim dispense success:
+
+```http
+POST https://api.vendx.site/api/transactions/TRX.../dispense-result
+Content-Type: application/json
+
+{
+  "machine_id": "VM001",
+  "dispense_result": "SUCCESS"
+}
+```
+
+8. Restock:
+
+```http
+POST https://api.vendx.site/api/machines/VM001/items/cola/restock
+Content-Type: application/json
+
+{
+  "amount": 5
+}
+```
+
+9. Logs:
+
+```http
+GET https://api.vendx.site/api/logs?machine_id=VM001&limit=5
+```
+
+## Testing Dashboard
+
+1. Buka `https://www.vendx.site`.
+2. Login dengan akun admin/operator/viewer aktif.
+3. Buka DevTools -> Network.
+4. Pastikan dashboard memanggil:
+
+```text
+https://api.vendx.site/api/machines/VM001/items
+https://api.vendx.site/api/machines/VM001/status
+https://api.vendx.site/api/machines/VM001/current-order
+https://api.vendx.site/api/transactions?machine_id=VM001&limit=5
+https://api.vendx.site/api/logs?machine_id=VM001&limit=5
+```
+
+5. Restock harus memanggil:
+
+```text
+POST https://api.vendx.site/api/machines/VM001/items/{itemId}/restock
+```
+
+6. Tidak boleh ada error Firebase listener di console.
+
+## Firebase Rules
+
+Rules ada di `database.rules.json`.
+
+Karena dashboard dan ESP32 mulai diarahkan ke Backend API, rules Firebase dapat diperketat bertahap. Pada tahap development/sandbox, beberapa write path mungkin masih longgar untuk kompatibilitas pengujian lama. Untuk production:
+
+- Dashboard tidak boleh menulis stok langsung ke Firebase.
+- ESP32 tidak perlu menulis transaksi langsung ke Firebase.
+- Backend dengan Firebase Admin SDK menjadi jalur tulis utama.
+- Firebase client dashboard cukup untuk Auth dan validasi user, atau nanti diganti dengan backend auth token.
+
+## Catatan Keamanan
+
+- Jangan taruh Midtrans Server Key di frontend dashboard.
+- Jangan taruh Midtrans Server Key di ESP32.
+- Jangan upload `.env`.
+- Jangan upload Firebase service account JSON.
+- Jangan menaruh Firebase Admin SDK di frontend.
+- Stok hanya berkurang setelah pembayaran valid dan `dispense_result = SUCCESS`.
+- Payment timeout tidak boleh dianggap dispense gagal.
+- Late payment setelah timeout harus masuk `LATE_PAID / NEEDS_REVIEW`.
