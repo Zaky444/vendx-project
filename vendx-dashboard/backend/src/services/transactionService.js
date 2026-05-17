@@ -16,7 +16,19 @@ function validatePositiveQty(qty) {
   return amount;
 }
 
-async function createTransaction({ machine_id, item_id, qty }) {
+function normalizePaymentMethod(paymentMethod) {
+  const method = String(paymentMethod || "snap").trim().toLowerCase();
+
+  if (method !== "snap" && method !== "qris") {
+    const error = new Error("payment_method must be snap or qris");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return method;
+}
+
+async function createTransaction({ machine_id, item_id, qty, payment_method }) {
   if (!machine_id || !item_id) {
     const error = new Error("machine_id and item_id are required");
     error.statusCode = 400;
@@ -24,6 +36,7 @@ async function createTransaction({ machine_id, item_id, qty }) {
   }
 
   const amount = validatePositiveQty(qty);
+  const paymentMethod = normalizePaymentMethod(payment_method);
   const machineInfo = await firebaseService.getValue(`/machines/${machine_id}/info`);
 
   if (!machineInfo) {
@@ -50,17 +63,20 @@ async function createTransaction({ machine_id, item_id, qty }) {
     qty: amount,
     price,
     total_price: totalPrice,
-    payment_method: "QRIS",
+    payment_method: paymentMethod,
     payment_state: "WAITING_PAYMENT",
     order_state: "WAITING_PAYMENT",
     status: "WAITING_PAYMENT",
     dispense_result: "NONE",
     midtrans_order_id: transactionId,
     midtrans_transaction_id: "NONE",
-    payment_type: "qris",
+    payment_type: "NONE",
     payment_url: "NONE",
     qr_url: "NONE",
+    qr_string: "NONE",
+    snap_token: "NONE",
     fraud_status: "NONE",
+    midtrans_status: "NONE",
     created_at: timestamp,
     updated_at: timestamp,
     expired_at: expiredAt
@@ -69,17 +85,21 @@ async function createTransaction({ machine_id, item_id, qty }) {
   const currentOrder = {
     transaction_id: transactionId,
     session_id: sessionId,
+    machine_id,
     item_id,
     item_name: item.name || "NONE",
     qty: amount,
     price,
     total_price: totalPrice,
-    payment_method: "QRIS",
+    payment_method: paymentMethod,
     payment_state: "WAITING_PAYMENT",
     order_state: "WAITING_PAYMENT",
     dispense_result: "NONE",
-    qr_url: "NONE",
     payment_url: "NONE",
+    qr_url: "NONE",
+    qr_string: "NONE",
+    snap_token: "NONE",
+    created_at: timestamp,
     expired_at: expiredAt,
     updated_at: timestamp
   };
@@ -166,7 +186,11 @@ async function getTransactionStatus(transactionId) {
     qty: Number(transaction.qty) || 0,
     payment_state: transaction.payment_state,
     order_state: transaction.order_state || transaction.status || "NONE",
-    dispense_result: transaction.dispense_result || "NONE"
+    dispense_result: transaction.dispense_result || "NONE",
+    payment_method: transaction.payment_method || "NONE",
+    payment_url: transaction.payment_url || "NONE",
+    qr_url: transaction.qr_url || "NONE",
+    qr_string: transaction.qr_string || "NONE"
   };
 }
 
