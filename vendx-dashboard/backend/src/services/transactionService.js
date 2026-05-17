@@ -9,7 +9,9 @@ function validatePositiveQty(qty) {
 
   if (!Number.isInteger(amount) || amount <= 0) {
     const error = new Error("qty must be a positive integer");
+    error.code = "VALIDATION_ERROR";
     error.statusCode = 400;
+    error.details = { qty };
     throw error;
   }
 
@@ -21,7 +23,12 @@ function normalizePaymentMethod(paymentMethod) {
 
   if (method !== "snap" && method !== "qris") {
     const error = new Error("payment_method must be snap or qris");
+    error.code = "VALIDATION_ERROR";
     error.statusCode = 400;
+    error.details = {
+      payment_method: paymentMethod,
+      allowed: ["snap", "qris"]
+    };
     throw error;
   }
 
@@ -31,7 +38,9 @@ function normalizePaymentMethod(paymentMethod) {
 async function createTransaction({ machine_id, item_id, qty, payment_method }) {
   if (!machine_id || !item_id) {
     const error = new Error("machine_id and item_id are required");
+    error.code = "VALIDATION_ERROR";
     error.statusCode = 400;
+    error.details = { machine_id: machine_id || "NONE", item_id: item_id || "NONE" };
     throw error;
   }
 
@@ -41,7 +50,9 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
 
   if (!machineInfo) {
     const error = new Error("Machine not found");
+    error.code = "MACHINE_NOT_FOUND";
     error.statusCode = 404;
+    error.details = { machine_id };
     throw error;
   }
 
@@ -183,7 +194,10 @@ async function getTransactionStatus(transactionId) {
     transaction_id: transaction.transaction_id,
     machine_id: transaction.machine_id,
     item_id: transaction.item_id,
+    item_name: transaction.item_name || "NONE",
     qty: Number(transaction.qty) || 0,
+    price: Number(transaction.price) || 0,
+    total_price: Number(transaction.total_price) || 0,
     payment_state: transaction.payment_state,
     order_state: transaction.order_state || transaction.status || "NONE",
     dispense_result: transaction.dispense_result || "NONE",

@@ -163,7 +163,8 @@ app.use((error, req, res, next) => {
     res,
     error.message || "Internal server error",
     statusCode,
-    error.details || null
+    error.details || null,
+    error.code || "ERROR"
   );
 });
 

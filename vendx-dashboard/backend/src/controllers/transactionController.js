@@ -5,9 +5,12 @@ const { sendSuccess } = require("../utils/response");
 async function createTransaction(req, res) {
   const transaction = await transactionService.createTransaction(req.body);
   const hasMidtransKey = Boolean(process.env.MIDTRANS_SERVER_KEY);
-  const payment = hasMidtransKey
-    ? await paymentService.createMidtransPayment(transaction.transaction_id)
-    : {
+  let payment = null;
+
+  try {
+    payment = hasMidtransKey
+      ? await paymentService.createMidtransPayment(transaction.transaction_id)
+      : {
         payment_method: transaction.payment_method || "snap",
         payment_url: transaction.payment_url || "NONE",
         qr_url: transaction.qr_url || "NONE",
@@ -18,11 +21,21 @@ async function createTransaction(req, res) {
         order_state: transaction.order_state,
         gross_amount: transaction.total_price
       };
+  } catch (error) {
+    error.code = error.code || "MIDTRANS_ERROR";
+    throw error;
+  }
 
   return sendSuccess(
     res,
     {
       transaction_id: transaction.transaction_id,
+      machine_id: transaction.machine_id,
+      item_id: transaction.item_id,
+      item_name: transaction.item_name,
+      qty: Number(transaction.qty) || 0,
+      price: Number(transaction.price) || 0,
+      total_price: Number(transaction.total_price) || 0,
       payment_method: payment.payment_method || transaction.payment_method || "snap",
       payment_url: payment.payment_url,
       qr_url: payment.qr_url,

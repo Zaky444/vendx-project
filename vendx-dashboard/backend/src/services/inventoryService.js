@@ -10,19 +10,54 @@ async function assertAvailableItem(machineId, itemId, qty) {
 
   if (!item) {
     const error = new Error("Item not found");
+    error.code = "ITEM_NOT_FOUND";
     error.statusCode = 404;
+    error.details = {
+      machine_id: machineId,
+      item_id: itemId
+    };
     throw error;
   }
 
   if (item.is_active !== true) {
     const error = new Error("Item is inactive");
+    error.code = "ITEM_INACTIVE";
     error.statusCode = 400;
+    error.details = {
+      machine_id: machineId,
+      item_id: itemId,
+      item_name: item.name || "NONE"
+    };
     throw error;
   }
 
-  if ((Number(item.stock) || 0) < qty) {
-    const error = new Error("Insufficient stock");
+  const price = Number(item.price);
+
+  if (!Number.isFinite(price) || price <= 0) {
+    const error = new Error("Invalid item price");
+    error.code = "INVALID_PRICE";
     error.statusCode = 400;
+    error.details = {
+      machine_id: machineId,
+      item_id: itemId,
+      price: item.price ?? 0
+    };
+    throw error;
+  }
+
+  const stock = Number(item.stock) || 0;
+
+  if (stock < qty) {
+    const error = new Error("Insufficient stock");
+    error.code = "OUT_OF_STOCK";
+    error.statusCode = 400;
+    error.details = {
+      machine_id: machineId,
+      item_id: itemId,
+      item_name: item.name || "NONE",
+      stock,
+      qty
+    };
     throw error;
   }
 

@@ -6,9 +6,10 @@ function sendSuccess(res, data = null, message = "OK", statusCode = 200) {
   });
 }
 
-function sendError(res, message = "Internal server error", statusCode = 500, details = null) {
+function sendError(res, message = "Internal server error", statusCode = 500, details = null, code = "ERROR") {
   return res.status(statusCode).json({
     success: false,
+    code,
     message,
     details
   });
