@@ -1,20 +1,26 @@
 const { pushValue, getValue } = require("./firebaseService");
 const { now } = require("../utils/time");
 
-async function createLog({ machine_id, event, message, source = "BACKEND", timestamp = now() }) {
+async function createLog({ machine_id, event, message, source = "BACKEND", transaction_id, timestamp = now() }) {
   if (!machine_id || !event || !message) {
     const error = new Error("machine_id, event, and message are required");
     error.statusCode = 400;
     throw error;
   }
 
-  return pushValue("/logs", {
+  const log = {
     machine_id,
     event,
     message,
     source,
     timestamp
-  });
+  };
+
+  if (transaction_id) {
+    log.transaction_id = transaction_id;
+  }
+
+  return pushValue("/logs", log);
 }
 
 async function listLogs({ machine_id, limit = 5 } = {}) {

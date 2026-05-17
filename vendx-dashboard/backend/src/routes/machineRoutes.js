@@ -9,6 +9,8 @@ router.get("/:machineId/overview", asyncHandler(machineController.getMachineOver
 router.get("/:machineId/status", asyncHandler(machineController.getMachineStatus));
 router.patch("/:machineId/status", asyncHandler(machineController.updateMachineStatus));
 router.get("/:machineId/current-order", asyncHandler(machineController.getCurrentOrder));
+router.get("/:machineId/command", asyncHandler(machineController.getMachineCommand));
+router.post("/:machineId/events", asyncHandler(machineController.createMachineEvent));
 router.get("/:machineId/items", asyncHandler(machineController.getMachineItems));
 router.get("/:machineId/items/:itemId", asyncHandler(machineController.getMachineItem));
 router.post("/:machineId/items/:itemId/restock", asyncHandler(restockController.restockItem));

@@ -43,6 +43,7 @@ async function createTransaction(req, res) {
       snap_token: payment.snap_token || payment.token || "NONE",
       payment_state: payment.payment_state || "WAITING_PAYMENT",
       order_state: payment.order_state || "WAITING_PAYMENT",
+      payment_expired_at: Number(transaction.payment_expired_at || transaction.expired_at) || 0,
       gross_amount: payment.gross_amount || transaction.total_price
     },
     payment.payment_method === "qris" ? "QRIS payment created" : "Transaction and Midtrans payment created",

@@ -62,7 +62,7 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
   const price = Number(item.price) || 0;
   const totalPrice = price * amount;
   const timestamp = now();
-  const timeoutMs = Number(process.env.PAYMENT_TIMEOUT_MS) || 15 * 60 * 1000;
+  const timeoutMs = Number(process.env.PAYMENT_TIMEOUT_MS) || 120000;
   const expiredAt = timestamp + timeoutMs;
 
   const transaction = {
@@ -90,6 +90,7 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
     midtrans_status: "NONE",
     created_at: timestamp,
     updated_at: timestamp,
+    payment_expired_at: expiredAt,
     expired_at: expiredAt
   };
 
@@ -111,6 +112,7 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
     qr_string: "NONE",
     snap_token: "NONE",
     created_at: timestamp,
+    payment_expired_at: expiredAt,
     expired_at: expiredAt,
     updated_at: timestamp
   };
@@ -127,6 +129,7 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
     machine_id,
     event: "TRANSACTION_CREATED",
     message: `Created transaction ${transactionId} for ${item_id} x ${amount}`,
+    transaction_id: transactionId,
     source: "BACKEND"
   });
 
@@ -145,50 +148,74 @@ async function getTransaction(transactionId) {
   return transaction;
 }
 
-async function markPaymentTimeoutIfNeeded(transaction) {
-  const expiredAt = Number(transaction.expired_at) || 0;
-  const paymentState = transaction.payment_state;
+async function applyPaymentTimeoutIfNeeded(transactionId) {
+  const transaction = await getTransaction(transactionId);
+  const terminalStates = [
+    "READY_TO_DISPENSE",
+    "DISPENSING",
+    "COMPLETED",
+    "DISPENSE_FAILED",
+    "PAYMENT_TIMEOUT",
+    "EXPIRED",
+    "FAILED"
+  ];
+  const paymentState = transaction.payment_state || "NONE";
+  const orderState = transaction.order_state || transaction.status || "NONE";
+  const expiredAt = Number(transaction.payment_expired_at || transaction.expired_at) || 0;
 
-  if (
-    expiredAt > 0
-    && now() > expiredAt
-    && paymentState !== "PAID"
-    && paymentState !== "PAYMENT_TIMEOUT"
-    && transaction.status === "WAITING_PAYMENT"
-  ) {
-    await firebaseService.updateValue(`/transactions/${transaction.transaction_id}`, {
-      payment_state: "PAYMENT_TIMEOUT",
-      order_state: "PAYMENT_TIMEOUT",
-      status: "PAYMENT_TIMEOUT",
-      updated_at: now()
-    });
-
-    await firebaseService.updateValue(`/machines/${transaction.machine_id}/current_order`, {
-      payment_state: "PAYMENT_TIMEOUT",
-      order_state: "PAYMENT_TIMEOUT"
-    });
-
-    await firebaseService.updateValue(`/machines/${transaction.machine_id}/status`, {
-      machine_state: "IDLE",
-      is_busy: false,
-      last_updated: now()
-    });
-
-    await logService.createLog({
-      machine_id: transaction.machine_id,
-      event: "PAYMENT_TIMEOUT",
-      message: `Payment timeout for ${transaction.transaction_id}`,
-      source: "BACKEND"
-    });
-
-    return getTransaction(transaction.transaction_id);
+  if (paymentState !== "WAITING_PAYMENT") {
+    return transaction;
   }
 
-  return transaction;
+  if (terminalStates.includes(orderState)) {
+    return transaction;
+  }
+
+  if (!expiredAt || now() <= expiredAt) {
+    return transaction;
+  }
+
+  const timestamp = now();
+
+  await firebaseService.updateValue(`/transactions/${transactionId}`, {
+    payment_state: "PAYMENT_TIMEOUT",
+    order_state: "PAYMENT_TIMEOUT",
+    status: "PAYMENT_TIMEOUT",
+    dispense_result: transaction.dispense_result || "NONE",
+    updated_at: timestamp
+  });
+
+  const currentOrder = await firebaseService.getValue(`/machines/${transaction.machine_id}/current_order`);
+  if (currentOrder && currentOrder.transaction_id === transactionId) {
+    await firebaseService.updateValue(`/machines/${transaction.machine_id}/current_order`, {
+      payment_state: "PAYMENT_TIMEOUT",
+      order_state: "PAYMENT_TIMEOUT",
+      dispense_result: "NONE",
+      updated_at: timestamp
+    });
+  }
+
+  await firebaseService.updateValue(`/machines/${transaction.machine_id}/status`, {
+    machine_state: "IDLE",
+    is_busy: false,
+    last_update: timestamp,
+    last_updated: timestamp
+  });
+
+  await logService.createLog({
+    machine_id: transaction.machine_id,
+    event: "PAYMENT_TIMEOUT",
+    message: `Payment timeout for transaction ${transactionId}`,
+    transaction_id: transactionId,
+    source: "BACKEND",
+    timestamp
+  });
+
+  return getTransaction(transactionId);
 }
 
 async function getTransactionStatus(transactionId) {
-  const transaction = await markPaymentTimeoutIfNeeded(await getTransaction(transactionId));
+  const transaction = await applyPaymentTimeoutIfNeeded(transactionId);
 
   return {
     transaction_id: transaction.transaction_id,
@@ -204,7 +231,8 @@ async function getTransactionStatus(transactionId) {
     payment_method: transaction.payment_method || "NONE",
     payment_url: transaction.payment_url || "NONE",
     qr_url: transaction.qr_url || "NONE",
-    qr_string: transaction.qr_string || "NONE"
+    qr_string: transaction.qr_string || "NONE",
+    payment_expired_at: Number(transaction.payment_expired_at || transaction.expired_at) || 0
   };
 }
 
@@ -389,6 +417,7 @@ module.exports = {
   createTransaction,
   getTransaction,
   getTransactionStatus,
+  applyPaymentTimeoutIfNeeded,
   simulatePaid,
   listTransactions,
   updateTransaction,

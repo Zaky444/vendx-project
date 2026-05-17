@@ -231,12 +231,66 @@ function mapNotificationStatus(notification) {
   };
 }
 
+function isPaidNotification(notification) {
+  const transactionStatus = notification.transaction_status;
+  const fraudStatus = notification.fraud_status || "NONE";
+
+  return transactionStatus === "settlement" || (transactionStatus === "capture" && fraudStatus === "accept");
+}
+
 async function handleMidtransNotification(body) {
   const notification = await coreApi.transaction.notification(body);
   const transactionId = notification.order_id;
   const transaction = await transactionService.getTransaction(transactionId);
   const mappedStatus = mapNotificationStatus(notification);
   const timestamp = now();
+
+  if (
+    isPaidNotification(notification)
+    && transaction.payment_state === "PAYMENT_TIMEOUT"
+    && (transaction.order_state || transaction.status) === "PAYMENT_TIMEOUT"
+  ) {
+    await firebaseService.updateValue(`/transactions/${transactionId}`, {
+      payment_state: "LATE_PAID",
+      order_state: "NEEDS_REVIEW",
+      status: "NEEDS_REVIEW",
+      midtrans_transaction_id: notification.transaction_id || "NONE",
+      payment_type: notification.payment_type || "NONE",
+      fraud_status: notification.fraud_status || "NONE",
+      midtrans_status: notification.transaction_status || "NONE",
+      midtrans_payment_type: notification.payment_type || "NONE",
+      updated_at: timestamp
+    });
+
+    await updateCurrentOrderIfMatches(transaction.machine_id, transactionId, {
+      payment_state: "LATE_PAID",
+      order_state: "NEEDS_REVIEW",
+      updated_at: timestamp
+    });
+
+    await firebaseService.updateValue(`/machines/${transaction.machine_id}/status`, {
+      machine_state: "NEEDS_REVIEW",
+      is_busy: false,
+      last_updated: timestamp
+    });
+
+    await logService.createLog({
+      machine_id: transaction.machine_id,
+      event: "LATE_PAYMENT_AFTER_TIMEOUT",
+      message: `Late payment received after timeout for transaction ${transactionId}`,
+      transaction_id: transactionId,
+      source: "MIDTRANS",
+      timestamp
+    });
+
+    return {
+      transaction_id: transactionId,
+      payment_state: "LATE_PAID",
+      order_state: "NEEDS_REVIEW",
+      status: "NEEDS_REVIEW",
+      log_event: "LATE_PAYMENT_AFTER_TIMEOUT"
+    };
+  }
 
   await firebaseService.updateValue(`/transactions/${transactionId}`, {
     payment_state: mappedStatus.payment_state,
@@ -266,6 +320,7 @@ async function handleMidtransNotification(body) {
     machine_id: transaction.machine_id,
     event: mappedStatus.log_event,
     message: `Midtrans status ${notification.transaction_status} for ${transactionId}`,
+    transaction_id: transactionId,
     source: "MIDTRANS"
   });
 

@@ -57,6 +57,7 @@ function getCurrentOrderNone() {
     payment_url: "NONE",
     qr_string: "NONE",
     snap_token: "NONE",
+    payment_expired_at: 0,
     expired_at: 0,
     updated_at: 0
   };

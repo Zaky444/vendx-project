@@ -38,11 +38,25 @@ async function getCurrentOrder(req, res) {
   return sendSuccess(res, currentOrder, "Current order fetched");
 }
 
+async function getMachineCommand(req, res) {
+  const { machineId } = req.params;
+  const command = await machineService.getMachineCommand(machineId);
+  return sendSuccess(res, command, "Machine command fetched");
+}
+
+async function createMachineEvent(req, res) {
+  const { machineId } = req.params;
+  const event = await machineService.createMachineEvent(machineId, req.body);
+  return sendSuccess(res, event, "Machine event processed", 201);
+}
+
 module.exports = {
   getMachineOverview,
   getMachineItems,
   getMachineItem,
   getMachineStatus,
   updateMachineStatus,
-  getCurrentOrder
+  getCurrentOrder,
+  getMachineCommand,
+  createMachineEvent
 };
