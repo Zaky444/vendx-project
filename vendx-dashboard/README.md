@@ -4,6 +4,19 @@ VendX adalah sistem vending machine IoT berbasis ESP32, Backend API Node.js/Expr
 
 Dashboard digunakan untuk monitoring admin/operator dan restock. Pembelian user tetap dilakukan dari ESP32/LCD pada mesin vending.
 
+## 📋 Dokumen Project
+
+- **[docs/PRD.md](../docs/PRD.md)** — Product Requirements Document: rencana pengembangan & daftar task aktif
+- **[Issues](https://github.com/Zaky444/vendx-project/issues)** — daftar task yang sedang dikerjakan
+
+## 🌿 Workflow Kontribusi
+
+1. Setiap task punya GitHub Issue — diskusikan *implementation plan* di issue sebelum coding.
+2. Buat branch dari `main` dengan format `task/<no>-<nama>`.
+3. Push ke branch fitur (**jangan langsung ke `main`**), lalu buat Pull Request.
+4. PR di-review & di-merge oleh owner.
+5. Setelah merge, jalankan `git pull origin main` untuk sinkronisasi.
+
 ## Arsitektur
 
 ```text
