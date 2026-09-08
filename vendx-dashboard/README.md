@@ -143,10 +143,27 @@ npm install
 npm run dev
 ```
 
-Health check:
+Health check (public, aman untuk uptime monitor):
 
 ```http
 GET http://localhost:5000/health
+```
+
+Response sehat (200) atau bermasalah (503):
+
+```json
+{
+  "success": true,
+  "status": "ok",
+  "timestamp": 1778890000000
+}
+```
+
+Health check detail (butuh header `X-Admin-Key` sesuai `ADMIN_API_KEY` di env):
+
+```http
+GET http://localhost:5000/health/detail
+X-Admin-Key: <ADMIN_API_KEY>
 ```
 
 Response:
@@ -154,10 +171,17 @@ Response:
 ```json
 {
   "success": true,
-  "message": "VendX backend is healthy",
-  "timestamp": 1778890000000
+  "status": "ok",
+  "timestamp": 1778890000000,
+  "uptime": 3600,
+  "version": "1.0.0",
+  "dependencies": {
+    "firebase": "ok"
+  }
 }
 ```
+
+Key salah atau tidak ada mendapat response 401.
 
 ## Deploy Backend ke Vercel
 
