@@ -11,6 +11,8 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const restockRoutes = require("./routes/restockRoutes");
 const logRoutes = require("./routes/logRoutes");
 const paymentController = require("./controllers/paymentController");
+const healthService = require("./services/healthService");
+const { requireAdminKey } = require("./utils/adminAuth");
 const { asyncHandler, sendError } = require("./utils/response");
 
 const app = express();
@@ -125,13 +127,21 @@ app.get("/", (req, res) => {
 
 // ================= HEALTH CHECK =================
 
-app.get("/health", (req, res) => {
-  res.json({
-    success: true,
-    message: "VendX backend is healthy",
+app.get("/health", asyncHandler(async (req, res) => {
+  const firebase = await healthService.checkFirebase();
+  const healthy = firebase === "ok";
+
+  res.status(healthy ? 200 : 503).json({
+    success: healthy,
+    status: healthy ? "ok" : "degraded",
     timestamp: Date.now()
   });
-});
+}));
+
+app.get("/health/detail", requireAdminKey, asyncHandler(async (req, res) => {
+  const { healthy, detail } = await healthService.getHealthDetail();
+  res.status(healthy ? 200 : 503).json(detail);
+}));
 
 // ================= API ROUTES =================
 
