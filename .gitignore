@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets — JANGAN PERNAH commit file ini!
+.env
+.env.local
+.env.*.local
+
+# Firebase service account (kredensial rahasia)
+serviceAccount*.json
+*-service-account*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS & editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Vercel
+.vercel
+
+# Testing coverage
+coverage/
