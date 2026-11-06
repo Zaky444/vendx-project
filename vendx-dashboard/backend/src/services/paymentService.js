@@ -133,6 +133,10 @@ async function createQrisPayment(transaction) {
   const actions = Array.isArray(response.actions) ? response.actions : [];
   const qrUrl = response.qr_url || extractQrisActionUrl(actions);
   const qrString = response.qr_string || response.qr_content || "NONE";
+  // transaction_id Midtrans (UUID) — dipakai halaman perantara /pay/{id}
+  // untuk menyusun URL gambar QRIS: https://api.sandbox.midtrans.com/v2/qris/{id}/qr-code
+  const midtransTxnId = response.transaction_id || "NONE";
+  const payPageUrl = midtransTxnId === "NONE" ? "NONE" : `https://api.vendx.site/pay?id=${midtransTxnId}`;
 
   await firebaseService.updateValue(`/transactions/${transaction.transaction_id}`, {
     payment_method: "qris",
@@ -145,7 +149,7 @@ async function createQrisPayment(transaction) {
     order_state: "WAITING_PAYMENT",
     status: "WAITING_PAYMENT",
     midtrans_order_id: transaction.transaction_id,
-    midtrans_transaction_id: response.transaction_id || "NONE",
+    midtrans_transaction_id: midtransTxnId,
     fraud_status: response.fraud_status || "NONE",
     midtrans_status: response.transaction_status || "pending",
     updated_at: timestamp
@@ -177,6 +181,8 @@ async function createQrisPayment(transaction) {
     payment_url: "NONE",
     qr_url: qrUrl,
     qr_string: qrString,
+    midtrans_transaction_id: midtransTxnId,
+    pay_page_url: payPageUrl,
     payment_state: "WAITING_PAYMENT",
     order_state: "WAITING_PAYMENT",
     gross_amount: Number(transaction.total_price) || 0

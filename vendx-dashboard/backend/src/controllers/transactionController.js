@@ -41,6 +41,8 @@ async function createTransaction(req, res) {
       qr_url: payment.qr_url,
       qr_string: payment.qr_string || "NONE",
       snap_token: payment.snap_token || payment.token || "NONE",
+      midtrans_transaction_id: payment.midtrans_transaction_id || "NONE",
+      pay_page_url: payment.pay_page_url || "NONE",
       payment_state: payment.payment_state || "WAITING_PAYMENT",
       order_state: payment.order_state || "WAITING_PAYMENT",
       payment_expired_at: Number(transaction.payment_expired_at || transaction.expired_at) || 0,

@@ -4,6 +4,7 @@ const cors = require("cors");
 const express = require("express");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const path = require("path");
 
 const machineRoutes = require("./routes/machineRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
@@ -142,6 +143,18 @@ app.get("/health/detail", requireAdminKey, asyncHandler(async (req, res) => {
   const { healthy, detail } = await healthService.getHealthDetail();
   res.status(healthy ? 200 : 503).json(detail);
 }));
+
+// ================= PAY PAGE (halaman perantara QR -> simulator) =================
+// GET /pay?id=<UUID_Midtrans>
+// Menampilkan pay.html yang AUTO-POST qrCodeUrl ke simulator v2.
+// File pay.html diletakkan di backend/public/pay.html (repo: web/pay.html di folder Arduino).
+app.get("/pay", (req, res) => {
+  const id = String(req.query.id || "");
+  if (!/^[0-9a-fA-F-]{8,64}$/.test(id)) {
+    return res.status(400).type("text").send("ID transaksi tidak valid");
+  }
+  return res.sendFile(path.join(__dirname, "..", "public", "pay.html"));
+});
 
 // ================= API ROUTES =================
 

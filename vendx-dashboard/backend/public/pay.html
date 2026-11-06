@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VendX Bayar (Sandbox)</title>
+</head>
+<body style="font-family:sans-serif;text-align:center;padding:32px 16px;background:#111;color:#eee">
+  <h3 style="margin:0 0 12px">VendX &mdash; Pembayaran (Sandbox)</h3>
+  <p id="msg" style="font-size:14px;color:#aaa">
+    Membuka simulator Midtrans...
+  </p>
+
+  <!-- Form auto-submit: POST field qrCodeUrl ke halaman pembayaran simulator.
+       Hasil tes: form asli simulator method=POST, TIDAK ada token/CSRF,
+       jadi POST langsung ini diterima tanpa ditolak. -->
+  <form id="f" action="https://simulator.sandbox.midtrans.com/v2/qris/payment" method="post">
+    <input type="hidden" name="qrCodeUrl" id="qrCodeUrl">
+  </form>
+
+  <!-- Fallback kalau auto-submit gagal (JS diblokir / kebijakan browser) -->
+  <p id="fallback" style="display:none;font-size:13px;color:#fca">
+    Automatic submit gagal. Langkah manual:<br>
+    1. Buka <a id="fbLink" href="#" style="color:#fc6;word-break:break-all">simulator</a><br>
+    2. Tempel URL QRIS berikut ke kolom <i>QR Code Image Url</i>, lalu klik <b>Scan QR</b>:<br>
+    <span id="fbUrl" style="word-break:break-all;font-size:12px;color:#7c4"></span>
+  </p>
+
+  <script>
+    // id = transaction_id Midtrans (UUID) dari query: ?id=<UUID>
+    const id = new URLSearchParams(location.search).get('id');
+    const qrCodeUrl = id
+      ? 'https://api.sandbox.midtrans.com/v2/qris/' + id + '/qr-code'
+      : '';
+
+    if (!qrCodeUrl) {
+      document.getElementById('msg').textContent =
+        'ID transaksi tidak ditemukan di URL.';
+    } else {
+      const input = document.getElementById('qrCodeUrl');
+      const fbUrl = document.getElementById('fbUrl');
+      const fbLink = document.getElementById('fbLink');
+      input.value = qrCodeUrl;
+      fbUrl.textContent = qrCodeUrl;
+      fbLink.href = 'https://simulator.sandbox.midtrans.com/v2/qris/index';
+
+      // Auto-submit form POST. Jika 2 detik kemudian masih di halaman ini,
+      // berarti submit gagal -> tampilkan fallback manual.
+      try {
+        document.getElementById('f').submit();
+        setTimeout(function () {
+          document.getElementById('fallback').style.display = 'block';
+        }, 2000);
+      } catch (e) {
+        document.getElementById('fallback').style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>
