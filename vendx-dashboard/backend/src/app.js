@@ -62,7 +62,18 @@ const corsOptions = {
 
 // ================= SECURITY MIDDLEWARE =================
 
-app.use(helmet());
+// CSP disesuaikan untuk pay.html (halaman perantara QRIS sandbox):
+// - 'unsafe-inline'      : script auto-submit di pay.html inline
+// - form-action simulator: halaman POST qrCodeUrl ke simulator Midtrans
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "form-action": ["'self'", "https://simulator.sandbox.midtrans.com"]
+    }
+  }
+}));
 
 // Manual CORS header and preflight handler
 app.use((req, res, next) => {
