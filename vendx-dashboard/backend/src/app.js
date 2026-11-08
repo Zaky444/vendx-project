@@ -118,6 +118,16 @@ app.use(express.json({ limit: "1mb" }));
 
 app.use(morgan("dev"));
 
+// ================= SHORT URL REDIRECT (QR-friendly) =================
+
+app.get("/p/:uuid", (req, res) => {
+  const { uuid } = req.params;
+  if (!uuid || !/^[a-f0-9\-]{36}$/.test(uuid)) {
+    return res.status(400).json({ success: false, message: "Invalid UUID" });
+  }
+  res.redirect(`/pay?id=${uuid}`);
+});
+
 // ================= ROOT ROUTE =================
 
 app.get("/", (req, res) => {
