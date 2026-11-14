@@ -73,10 +73,17 @@ async function simulatePaid(req, res) {
   return sendSuccess(res, result, "Payment simulated as PAID");
 }
 
+// Ringkasan analitik dari SELURUH transaksi (bukan yang ter-limit) - #27.
+async function getSummary(req, res) {
+  const summary = await transactionService.getSummary(req.query);
+  return sendSuccess(res, summary, "Summary fetched");
+}
+
 module.exports = {
   createTransaction,
   listTransactions,
   submitDispenseResult,
+  getSummary,
   getTransactionStatus,
   simulatePaid
 };

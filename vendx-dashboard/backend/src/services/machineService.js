@@ -129,6 +129,32 @@ function isActiveTransactionId(transactionId) {
   return transactionId && transactionId !== "NONE";
 }
 
+// State order yang masih mengunci mesin (belum selesai).
+const ACTIVE_ORDER_STATES = [
+  "WAITING_PAYMENT",
+  "READY_TO_DISPENSE",
+  "DISPENSING",
+  "PAID",
+  "PENDING",
+  "NEEDS_REVIEW"
+];
+
+/**
+ * Cek apakah mesin masih punya order aktif yang belum selesai.
+ * Dipakai agar event ONLINE/IDLE tidak melepas status is_busy
+ * padahal transaksi masih berjalan (#25).
+ */
+async function hasActiveOrder(machineId) {
+  const currentOrder = await firebaseService.getValue(`/machines/${machineId}/current_order`);
+  if (!currentOrder || !isActiveTransactionId(currentOrder.transaction_id)) {
+    return false;
+  }
+  const paymentState = String(currentOrder.payment_state || "").toUpperCase();
+  const orderState = String(currentOrder.order_state || currentOrder.status || "").toUpperCase();
+  // Order dianggap aktif bila belum masuk state terminal.
+  return ACTIVE_ORDER_STATES.includes(paymentState) || ACTIVE_ORDER_STATES.includes(orderState);
+}
+
 function buildCommand(machineId, order = {}) {
   const paymentState = order.payment_state || "NONE";
   const orderState = order.order_state || "IDLE";
@@ -213,9 +239,21 @@ async function getMachineCommand(machineId) {
   const transactionId = currentOrder?.transaction_id;
 
   if (!isActiveTransactionId(transactionId)) {
+    // Tidak ada order aktif. Jika mesin masih tertinggal is_busy=true (orphan,
+    // mis. timeout tidak pernah ter-poll), lepaskan agar mesin tidak macet (#22).
+    const status = await firebaseService.getValue(`/machines/${machineId}/status`);
+    if (status && status.is_busy === true) {
+      await firebaseService.updateValue(`/machines/${machineId}/status`, {
+        is_busy: false,
+        machine_state: "IDLE",
+        last_updated: now()
+      });
+    }
     return buildCommand(machineId);
   }
 
+  // applyPaymentTimeoutIfNeeded menjalankan sweep timeout berbasis waktu kadaluarsa,
+  // dipicu oleh polling ESP32 (serverless-safe, tanpa cron) (#22).
   const transaction = await transactionService.applyPaymentTimeoutIfNeeded(transactionId);
   return buildCommand(machineId, {
     ...currentOrder,
@@ -242,12 +280,23 @@ async function createMachineEvent(machineId, body = {}) {
   let message = body.message || event;
 
   if (event === "ONLINE") {
-    Object.assign(statusPayload, {
-      connection: "ONLINE",
-      machine_state: "IDLE",
-      is_busy: false
-    });
+    // Event koneksi hanya memperbarui `connection`. Jangan paksa mesin IDLE
+    // bila masih ada order aktif (#25).
+    statusPayload.connection = "ONLINE";
+    if (!(await hasActiveOrder(machineId))) {
+      Object.assign(statusPayload, {
+        machine_state: "IDLE",
+        is_busy: false
+      });
+    }
   } else if (event === "IDLE") {
+    // IDLE saat order aktif -> tolak agar tidak menghapus status sibuk (#25).
+    if (await hasActiveOrder(machineId)) {
+      const error = new Error("Cannot set IDLE while an order is still active");
+      error.statusCode = 409;
+      error.details = { event, transaction_id: transactionId };
+      throw error;
+    }
     Object.assign(statusPayload, {
       machine_state: "IDLE",
       is_busy: false

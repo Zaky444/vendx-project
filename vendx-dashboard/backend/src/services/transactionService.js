@@ -57,6 +57,26 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
   }
 
   const item = await inventoryService.assertAvailableItem(machine_id, item_id, amount);
+
+  // Tolak order baru bila mesin masih punya order aktif (#23).
+  // Mencegah pembeli kedua menimpa sesi pembayaran pembeli pertama.
+  const existingOrder = await firebaseService.getValue(`/machines/${machine_id}/current_order`);
+  if (existingOrder && existingOrder.transaction_id && existingOrder.transaction_id !== "NONE") {
+    const activeStates = [
+      "WAITING_PAYMENT", "READY_TO_DISPENSE", "DISPENSING",
+      "PAID", "PENDING", "NEEDS_REVIEW"
+    ];
+    const payState = String(existingOrder.payment_state || "").toUpperCase();
+    const ordState = String(existingOrder.order_state || existingOrder.status || "").toUpperCase();
+    if (activeStates.includes(payState) || activeStates.includes(ordState)) {
+      const error = new Error("Machine is busy with another order");
+      error.code = "MACHINE_BUSY";
+      error.statusCode = 409;
+      error.details = { machine_id, active_transaction_id: existingOrder.transaction_id };
+      throw error;
+    }
+  }
+
   const transactionId = generateTransactionId();
   const sessionId = generateSessionId();
   const price = Number(item.price) || 0;
@@ -408,6 +428,52 @@ async function handleDispenseResult(transactionId, { machine_id, dispense_result
   };
 }
 
+/**
+ * Ringkasan analitik (issue #27, #26): menghitung SEMUA transaksi sukses
+ * pada rentang waktu, bukan hanya yang terpotong limit tabel.
+ * Zona waktu dikunci Asia/Jakarta (WIB) agar konsisten dengan jam operasional.
+ */
+async function getSummary({ machine_id } = {}) {
+  const transactions = await firebaseService.getValue("/transactions");
+
+  const successful = Object.values(transactions || {})
+    .filter((t) => !machine_id || t.machine_id === machine_id)
+    .filter((t) => {
+      const status = String(t.status || "").toUpperCase();
+      const dispense = String(t.dispense_result || "").toUpperCase();
+      return status === "COMPLETED" || status === "SUCCESS" || dispense === "SUCCESS";
+    });
+
+  // Batas hari & bulan ini berdasarkan Asia/Jakarta (UTC+7).
+  const nowJakarta = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const todayKey = nowJakarta.toISOString().slice(0, 10);       // YYYY-MM-DD (WIB)
+  const monthKey = nowJakarta.toISOString().slice(0, 7);        // YYYY-MM (WIB)
+
+  const toJakartaKey = (ts) => new Date(ts + 7 * 60 * 60 * 1000).toISOString();
+
+  let todayOrders = 0, todayRevenue = 0, monthlyOrders = 0, monthlyRevenue = 0;
+
+  for (const t of successful) {
+    const time = Number(t.updated_at || t.created_at) || 0;
+    if (!time) continue;
+    const iso = toJakartaKey(time);
+    const tDay = iso.slice(0, 10);
+    const tMonth = iso.slice(0, 7);
+    const price = Number(t.total_price) || 0;
+
+    if (tDay === todayKey) { todayOrders++; todayRevenue += price; }
+    if (tMonth === monthKey) { monthlyOrders++; monthlyRevenue += price; }
+  }
+
+  return {
+    today_orders: todayOrders,
+    today_revenue: todayRevenue,
+    monthly_orders: monthlyOrders,
+    monthly_revenue: monthlyRevenue,
+    timezone: "Asia/Jakarta"
+  };
+}
+
 module.exports = {
   createTransaction,
   getTransaction,
@@ -415,6 +481,7 @@ module.exports = {
   applyPaymentTimeoutIfNeeded,
   simulatePaid,
   listTransactions,
+  getSummary,
   updateTransaction,
   handleDispenseResult
 };

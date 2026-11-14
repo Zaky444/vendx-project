@@ -16,6 +16,7 @@ const createTransactionValidation = [
 ];
 
 router.get("/", asyncHandler(transactionController.listTransactions));
+router.get("/summary", asyncHandler(transactionController.getSummary));
 // Buat transaksi = tulis ke DB + panggil Midtrans -> rate limit ketat.
 router.post("/", strictLimiter, createTransactionValidation, handleValidation, asyncHandler(transactionController.createTransaction));
 router.get("/:transactionId/status", asyncHandler(transactionController.getTransactionStatus));

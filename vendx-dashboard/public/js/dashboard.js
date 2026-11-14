@@ -303,69 +303,15 @@ function sortNewestFirst(a, b) {
   return getTransactionTime(b) - getTransactionTime(a);
 }
 
-function isSuccessfulTransaction(transaction) {
-  const status = safeText(transaction?.status).toUpperCase();
-  const dispenseResult = safeText(transaction?.dispense_result).toUpperCase();
-
-  return status === "COMPLETED" || status === "SUCCESS" || dispenseResult === "SUCCESS";
-}
-
-function isToday(timestamp) {
-  if (!timestamp) {
-    return false;
-  }
-
-  const date = new Date(timestamp);
-  const now = new Date();
-
-  return date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth()
-    && date.getDate() === now.getDate();
-}
-
-function isThisMonth(timestamp) {
-  if (!timestamp) {
-    return false;
-  }
-
-  const date = new Date(timestamp);
-  const now = new Date();
-
-  return date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth();
-}
-
-function calculateAnalytics(transactions = {}) {
-  const visibleSuccessfulTransactions = normalizeList(transactions)
-    .filter((transaction) => canSeeMachine(transaction?.machine_id))
-    .filter(isSuccessfulTransaction);
-
-  const todayTransactions = visibleSuccessfulTransactions.filter((transaction) => isToday(getTransactionTime(transaction)));
-  const monthlyTransactions = visibleSuccessfulTransactions.filter((transaction) => isThisMonth(getTransactionTime(transaction)));
-
-  const todayRevenue = todayTransactions.reduce((total, transaction) => total + (Number(transaction?.total_price) || 0), 0);
-  const monthlyRevenue = monthlyTransactions.reduce((total, transaction) => total + (Number(transaction?.total_price) || 0), 0);
-
-  return {
-    todayOrders: todayTransactions.length,
-    monthlyOrders: monthlyTransactions.length,
-    todayRevenue,
-    monthlyRevenue
-  };
-}
-
-function renderSummaryCards(transactions = {}) {
-  const analytics = calculateAnalytics(transactions);
-
-  setText("todayOrders", analytics.todayOrders);
-  setText("monthlyOrders", analytics.monthlyOrders);
-  setText("todayRevenue", formatRupiah(analytics.todayRevenue));
-  setText("monthlyRevenue", formatRupiah(analytics.monthlyRevenue));
+function renderSummaryCards(summary = {}) {
+  // Data dari endpoint /transactions/summary (dihitung backend dari seluruh transaksi).
+  setText("todayOrders", Number(summary.today_orders) || 0);
+  setText("monthlyOrders", Number(summary.monthly_orders) || 0);
+  setText("todayRevenue", formatRupiah(Number(summary.today_revenue) || 0));
+  setText("monthlyRevenue", formatRupiah(Number(summary.monthly_revenue) || 0));
 }
 
 function renderTransactions(transactions = {}) {
-  renderSummaryCards(transactions);
-
   const tableBody = document.getElementById("transactionsTableBody");
   if (!tableBody) {
     return;
@@ -474,12 +420,14 @@ async function loadMachineInfo() {
 
 async function loadDashboardData() {
   try {
-    const [itemsData, statusData, currentOrder, transactionsData, logsData] = await Promise.all([
+    const [itemsData, statusData, currentOrder, transactionsData, logsData, summaryData] = await Promise.all([
       apiRequest(`/api/machines/${machineId}/items`),
       apiRequest(`/api/machines/${machineId}/status`),
       apiRequest(`/api/machines/${machineId}/current-order`),
       apiRequest(`/api/transactions?machine_id=${encodeURIComponent(machineId)}&limit=5`),
-      apiRequest(`/api/logs?machine_id=${encodeURIComponent(machineId)}&limit=5`)
+      apiRequest(`/api/logs?machine_id=${encodeURIComponent(machineId)}&limit=5`),
+      // Ringkasan dihitung backend dari SELURUH transaksi (bukan yang di-limit) - #27.
+      apiRequest(`/api/transactions/summary?machine_id=${encodeURIComponent(machineId)}`)
     ]);
 
     renderItems(itemsData.items || {});
@@ -487,6 +435,7 @@ async function loadDashboardData() {
     renderCurrentOrder(currentOrder || {});
     renderTransactions(transactionsData.transactions || []);
     renderLogs(logsData.logs || []);
+    renderSummaryCards(summaryData || {});
     setRealtimeState("Backend connected", true);
     dashboardLoadErrorShown = false;
   } catch (error) {

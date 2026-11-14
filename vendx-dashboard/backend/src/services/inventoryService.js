@@ -165,14 +165,16 @@ async function decrementStock(machineId, itemId, qty) {
   }
 
   const result = await stockRef.transaction((currentStock) => {
+    // Hanya percaya nilai `current` di dalam transaction (#24).
+    // Jangan pakai `stockBefore` yang dibaca sebelum transaction (bisa basi).
     if (currentStock === null || currentStock === undefined) {
-      return stockBefore - amount;
+      return; // abort -> transaction gagal, stok tidak ditulis
     }
 
     const stock = Number(currentStock);
 
     if (!Number.isFinite(stock) || stock < amount) {
-      return;
+      return; // abort -> stok tidak cukup
     }
 
     return stock - amount;
