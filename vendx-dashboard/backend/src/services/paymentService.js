@@ -27,16 +27,23 @@ async function createMidtransPayment(transactionId) {
 }
 
 function buildPaymentPayload(transaction) {
+  const unitPrice = Number(transaction.price) || 0;
+  const quantity = Number(transaction.qty) || 1;
+  // gross_amount WAJIB sama dengan jumlah (price x quantity) di item_details.
+  // Midtrans menolak transaksi bila keduanya tidak cocok. Diturunkan langsung
+  // dari unitPrice x quantity agar selalu konsisten (bug #21).
+  const grossAmount = unitPrice * quantity;
+
   return {
     transaction_details: {
       order_id: transaction.transaction_id,
-      gross_amount: Number(transaction.total_price) || 0
+      gross_amount: grossAmount
     },
     item_details: [
       {
         id: transaction.item_id,
-        price: Number(transaction.price) || 0,
-        quantity: Number(transaction.qty) || 1,
+        price: unitPrice,
+        quantity,
         name: transaction.item_name || transaction.item_id
       }
     ],
@@ -109,7 +116,7 @@ async function createSnapPayment(transaction) {
     qr_string: "NONE",
     payment_state: "WAITING_PAYMENT",
     order_state: "WAITING_PAYMENT",
-    gross_amount: Number(transaction.total_price) || 0
+    gross_amount: (Number(transaction.price) || 0) * (Number(transaction.qty) || 1)
   };
 }
 
@@ -185,7 +192,7 @@ async function createQrisPayment(transaction) {
     pay_page_url: payPageUrl,
     payment_state: "WAITING_PAYMENT",
     order_state: "WAITING_PAYMENT",
-    gross_amount: Number(transaction.total_price) || 0
+    gross_amount: (Number(transaction.price) || 0) * (Number(transaction.qty) || 1)
   };
 }
 
