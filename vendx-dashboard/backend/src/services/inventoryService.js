@@ -165,10 +165,12 @@ async function decrementStock(machineId, itemId, qty) {
   }
 
   const result = await stockRef.transaction((currentStock) => {
-    // Hanya percaya nilai `current` di dalam transaction (#24).
-    // Jangan pakai `stockBefore` yang dibaca sebelum transaction (bisa basi).
+    // Firebase memanggil callback 2x: pertama dengan null (belum ada cache
+    // lokal), kedua dengan nilai asli (penentu akhir). Saat null, fallback ke
+    // stockBefore agar tidak langsung abort (#24); validasi sungguhan tetap
+    // berjalan di call kedua memakai nilai `current` terbaru.
     if (currentStock === null || currentStock === undefined) {
-      return; // abort -> transaction gagal, stok tidak ditulis
+      return stockBefore - amount;
     }
 
     const stock = Number(currentStock);
