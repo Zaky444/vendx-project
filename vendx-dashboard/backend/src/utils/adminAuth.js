@@ -1,3 +1,5 @@
+const { safeCompare } = require("./cryptoUtils");
+
 function requireAdminKey(req, res, next) {
   const adminKey = process.env.ADMIN_API_KEY;
 
@@ -8,7 +10,8 @@ function requireAdminKey(req, res, next) {
     });
   }
 
-  if (req.get("X-Admin-Key") !== adminKey) {
+  // Bandingkan timing-safe agar tahan timing attack.
+  if (!safeCompare(req.get("X-Admin-Key") || "", adminKey)) {
     return res.status(401).json({
       success: false,
       message: "Invalid or missing X-Admin-Key header"

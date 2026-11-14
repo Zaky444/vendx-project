@@ -251,6 +251,41 @@ async function handleMidtransNotification(body) {
   const mappedStatus = mapNotificationStatus(notification);
   const timestamp = now();
 
+  // Validasi nominal (#13): notifikasi "paid" yang nominalnya tidak cocok
+  // dengan total transaksi TIDAK boleh menandai PAID.
+  if (
+    isPaidNotification(notification)
+    && transaction.total_price
+  ) {
+    const expected = Number(transaction.total_price) || 0;
+    const received = Number(notification.gross_amount) || 0;
+    if (Math.abs(expected - received) > 1) {
+      await logService.createLog({
+        machine_id: transaction.machine_id,
+        event: "PAYMENT_AMOUNT_MISMATCH",
+        message: `Nominal tidak cocok untuk ${transactionId}: expected ${expected}, received ${received}`,
+        transaction_id: transactionId,
+        source: "MIDTRANS",
+        timestamp
+      });
+
+      await firebaseService.updateValue(`/transactions/${transactionId}`, {
+        status: "NEEDS_REVIEW",
+        order_state: "NEEDS_REVIEW",
+        midtrans_transaction_id: notification.transaction_id || "NONE",
+        updated_at: timestamp
+      });
+
+      return {
+        transaction_id: transactionId,
+        payment_state: transaction.payment_state,
+        order_state: "NEEDS_REVIEW",
+        status: "NEEDS_REVIEW",
+        log_event: "PAYMENT_AMOUNT_MISMATCH"
+      };
+    }
+  }
+
   if (
     isPaidNotification(notification)
     && transaction.payment_state === "PAYMENT_TIMEOUT"
