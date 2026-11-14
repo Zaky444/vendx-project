@@ -289,6 +289,32 @@ async function createMachineEvent(machineId, body = {}) {
         is_busy: false
       });
     }
+  } else if (event === "CANCEL") {
+    // Pembeli membatalkan order di mesin. Tolak pembayaran yang masih WAITING
+    // agar tidak bisa dibayar setelah dibatalkan, lalu lepaskan mesin.
+    const activeTxId = (await firebaseService.getValue(`/machines/${machineId}/current_order`))?.transaction_id;
+    if (isActiveTransactionId(activeTxId)) {
+      try {
+        await transactionService.applyPaymentTimeoutIfNeeded(activeTxId);
+      } catch (_) {
+        // Jangan gagalkan CANCEL bila penolakan pembayaran gagal; tetap lepaskan mesin.
+      }
+    }
+    await firebaseService.setValue(`/machines/${machineId}/current_order`, {
+      transaction_id: "NONE",
+      item_id: "NONE",
+      item_name: "NONE",
+      payment_state: "NONE",
+      order_state: "IDLE",
+      status: "IDLE",
+      dispense_result: "NONE",
+      updated_at: timestamp
+    });
+    Object.assign(statusPayload, {
+      machine_state: "IDLE",
+      is_busy: false
+    });
+    message = "Order cancelled by machine";
   } else if (event === "IDLE") {
     // IDLE saat order aktif -> tolak agar tidak menghapus status sibuk (#25).
     if (await hasActiveOrder(machineId)) {
