@@ -53,7 +53,7 @@ describe("POST /api/transactions", () => {
   test("payload valid membuat transaksi (201) dan datanya tersimpan", async () => {
     const res = await request(app)
       .post("/api/transactions")
-      .send({ machine_id: MACHINE_ID, item_id: ITEM_ID, qty: 2, payment_method: "snap" });
+      .send({ machine_id: MACHINE_ID, item_id: ITEM_ID, qty: 1, payment_method: "snap" });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -62,8 +62,8 @@ describe("POST /api/transactions", () => {
     expect(data.transaction_id).toMatch(/^TRX/);
     expect(data.machine_id).toBe(MACHINE_ID);
     expect(data.item_id).toBe(ITEM_ID);
-    expect(data.qty).toBe(2);
-    expect(data.total_price).toBe(10000);
+    expect(data.qty).toBe(1);
+    expect(data.total_price).toBe(5000);
     expect(data.payment_state).toBe("WAITING_PAYMENT");
     expect(data.order_state).toBe("WAITING_PAYMENT");
 
@@ -71,7 +71,7 @@ describe("POST /api/transactions", () => {
     const savedTransaction = firebaseMock.__get(`/transactions/${data.transaction_id}`);
     expect(savedTransaction).toBeTruthy();
     expect(savedTransaction.status).toBe("WAITING_PAYMENT");
-    expect(savedTransaction.total_price).toBe(10000);
+    expect(savedTransaction.total_price).toBe(5000);
 
     const machineStatus = firebaseMock.__get(`/machines/${MACHINE_ID}/status`);
     expect(machineStatus.machine_state).toBe("WAITING_PAYMENT");

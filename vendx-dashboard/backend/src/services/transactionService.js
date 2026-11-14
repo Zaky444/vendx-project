@@ -15,6 +15,17 @@ function validatePositiveQty(qty) {
     throw error;
   }
 
+  // Prototipe: batasi qty = 1 per order (Opsi A).
+  // Sensor drop hanya mendeteksi pengambilan satu barang; multi-qty
+  // akan diimplementasikan setelah UI/UX disesuaikan.
+  if (amount > 1) {
+    const error = new Error("qty must be 1 for now (prototype limitation)");
+    error.code = "VALIDATION_ERROR";
+    error.statusCode = 400;
+    error.details = { qty, max_allowed: 1 };
+    throw error;
+  }
+
   return amount;
 }
 
