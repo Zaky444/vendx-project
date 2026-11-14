@@ -69,11 +69,10 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
 
   const item = await inventoryService.assertAvailableItem(machine_id, item_id, amount);
 
-  // Tolak order baru bila mesin masih punya order aktif (#23).
-  // Mencegah pembeli kedua menimpa sesi pembayaran pembeli pertama.
-  // Pengecekan tidak percaya pada state `current_order` saja: kalau state
-  // aktif, transaksi aslinya diverifikasi. Kalau sudah terminal (COMPLETED /
-  // FAILED / TIMEOUT / EXPIRED), `current_order` hanya basi -> auto-recover.
+  // Order SELALU dibuat. Tidak ada lagi penolakan MACHINE_BUSY: bila ada
+  // order sebelumnya yang tampak aktif, transaksi aslinya diverifikasi dan
+  // current_order basi dibersihkan, lalu order baru ditimpa. Concurrent
+  // payment tetap dicatat lewat log untuk audit, tapi tidak memblokir.
   const TERMINAL_STATES = [
     "COMPLETED", "DISPENSE_FAILED", "PAYMENT_TIMEOUT",
     "EXPIRED", "FAILED", "TIMEOUT"
@@ -86,14 +85,12 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
     ];
     const payState = String(existingOrder.payment_state || "").toUpperCase();
     const ordState = String(existingOrder.order_state || existingOrder.status || "").toUpperCase();
-    const looksActive = activeStates.includes(payState) || activeStates.includes(ordState);
 
-    if (looksActive) {
+    if (activeStates.includes(payState) || activeStates.includes(ordState)) {
       const activeTxId = existingOrder.transaction_id;
       let realTx = null;
 
       if (activeTxId && activeTxId !== "NONE") {
-        // Transaksi asli menentukan: kalau sudah terminal, current_order basi.
         realTx = await firebaseService.getValue(`/transactions/${activeTxId}`);
       }
 
@@ -104,7 +101,7 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
         || TERMINAL_STATES.includes(realOrd);
 
       if (realTerminal) {
-        // Auto-recover: kosongkan current_order basi agar mesin tidak macet.
+        // current_order basi -> bersihkan.
         await firebaseService.setValue(`/machines/${machine_id}/current_order`, {
           transaction_id: "NONE",
           item_id: "NONE",
@@ -116,11 +113,14 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
           updated_at: now()
         });
       } else {
-        const error = new Error("Machine is busy with another order");
-        error.code = "MACHINE_BUSY";
-        error.statusCode = 409;
-        error.details = { machine_id, active_transaction_id: activeTxId };
-        throw error;
+        // Ada pembayaran lain masih berjalan -> catat, tapi TETAP lanjut buat order baru.
+        await logService.createLog({
+          machine_id,
+          event: "CONCURRENT_ORDER_WARN",
+          message: `Order baru dibuat saat masih ada order aktif ${activeTxId}`,
+          transaction_id: activeTxId,
+          source: "BACKEND"
+        });
       }
     }
   }
