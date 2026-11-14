@@ -15,6 +15,7 @@ const paymentController = require("./controllers/paymentController");
 const healthService = require("./services/healthService");
 const { requireAdminKey } = require("./utils/adminAuth");
 const { asyncHandler, sendError } = require("./utils/response");
+const { globalLimiter, strictLimiter } = require("./middleware/rateLimit");
 
 const app = express();
 
@@ -113,6 +114,10 @@ app.options("*", cors(corsOptions));
 // ================= BODY PARSER =================
 
 app.use(express.json({ limit: "1mb" }));
+
+// ================= RATE LIMITING =================
+// Global: 200 req/menit per IP. Cukup longgar untuk ESP32 polling (~30-60 req/mnt).
+app.use(globalLimiter);
 
 // ================= LOGGER =================
 

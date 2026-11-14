@@ -3,7 +3,8 @@ const { body } = require("express-validator");
 const transactionController = require("../controllers/transactionController");
 const { asyncHandler } = require("../utils/response");
 const { handleValidation } = require("../utils/validate");
-const { requireAdminKey } = require("../utils/adminAuth");
+const { requirePrivilegedAccess } = require("../utils/accessControl");
+const { strictLimiter } = require("../middleware/rateLimit");
 
 const router = express.Router();
 
@@ -15,10 +16,11 @@ const createTransactionValidation = [
 ];
 
 router.get("/", asyncHandler(transactionController.listTransactions));
-router.post("/", createTransactionValidation, handleValidation, asyncHandler(transactionController.createTransaction));
+// Buat transaksi = tulis ke DB + panggil Midtrans -> rate limit ketat.
+router.post("/", strictLimiter, createTransactionValidation, handleValidation, asyncHandler(transactionController.createTransaction));
 router.get("/:transactionId/status", asyncHandler(transactionController.getTransactionStatus));
-// simulate-paid memaksa transaksi jadi PAID tanpa bayar -> hanya admin.
-router.post("/:transactionId/simulate-paid", requireAdminKey, asyncHandler(transactionController.simulatePaid));
+// simulate-paid memaksa transaksi jadi PAID tanpa bayar -> auth + rate limit ketat.
+router.post("/:transactionId/simulate-paid", strictLimiter, requirePrivilegedAccess, asyncHandler(transactionController.simulatePaid));
 router.post("/:transactionId/dispense-result", asyncHandler(transactionController.submitDispenseResult));
 
 module.exports = router;
