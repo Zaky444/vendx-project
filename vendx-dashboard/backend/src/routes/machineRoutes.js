@@ -4,6 +4,7 @@ const machineController = require("../controllers/machineController");
 const restockController = require("../controllers/restockController");
 const { asyncHandler } = require("../utils/response");
 const { handleValidation } = require("../utils/validate");
+const { requirePrivilegedAccess } = require("../utils/accessControl");
 
 const router = express.Router();
 
@@ -32,6 +33,7 @@ router.get("/:machineId/command", asyncHandler(machineController.getMachineComma
 router.post("/:machineId/events", eventValidation, handleValidation, asyncHandler(machineController.createMachineEvent));
 router.get("/:machineId/items", asyncHandler(machineController.getMachineItems));
 router.get("/:machineId/items/:itemId", asyncHandler(machineController.getMachineItem));
-router.post("/:machineId/items/:itemId/restock", restockValidation, handleValidation, asyncHandler(restockController.restockItem));
+// Restock mengubah stok (data uang) -> hanya admin. Firmware tidak memakai endpoint ini.
+router.post("/:machineId/items/:itemId/restock", requirePrivilegedAccess, restockValidation, handleValidation, asyncHandler(restockController.restockItem));
 
 module.exports = router;

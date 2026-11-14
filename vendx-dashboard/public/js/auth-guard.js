@@ -78,6 +78,16 @@ export async function logoutUser() {
   window.location.replace("login.html");
 }
 
+// Ambil Firebase ID token user yang sedang login (untuk header Authorization).
+// Token ini diverifikasi ulang di backend, role dicek server-side.
+export async function getCurrentIdToken() {
+  const user = auth?.currentUser;
+  if (!user) {
+    return null;
+  }
+  return await user.getIdToken();
+}
+
 export function requireAuth() {
   return new Promise((resolve, reject) => {
     if (hasFirebasePlaceholder()) {

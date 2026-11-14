@@ -1,9 +1,10 @@
 const express = require("express");
 const { body } = require("express-validator");
-const restockController = require("../controllers/restockController");
-const { asyncHandler } = require("../utils/response");
-const { handleValidation } = require("../utils/validate");
 
+// CATATAN (#28): route restock ASLI ada di machineRoutes.js
+// (POST /api/machines/:machineId/items/:itemId/restock) dan sudah dilindungi
+// requireAdminKey. Duplikat di sini dulu lolos tanpa auth (celah bypass),
+// jadi handler-nya dihapus. Router dipertahankan agar app.js tidak rusak.
 const router = express.Router();
 
 const restockValidation = [
@@ -11,6 +12,6 @@ const restockValidation = [
   body("amount").optional().isInt({ min: 1 }).withMessage("amount must be an integer of at least 1")
 ];
 
-router.post("/machines/:machineId/items/:itemId/restock", restockValidation, handleValidation, asyncHandler(restockController.restockItem));
+void restockValidation; // disiapkan bila nanti perlu endpoint restock terpisah
 
 module.exports = router;

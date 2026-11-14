@@ -1,4 +1,4 @@
-import { logoutUser, requireAuth } from "./auth-guard.js";
+import { logoutUser, requireAuth, getCurrentIdToken } from "./auth-guard.js";
 import {
   escapeHtml,
   formatRupiah,
@@ -452,8 +452,11 @@ function closeRestockModal() {
 }
 
 async function restockItem(itemId, amount) {
+  // Kirim Firebase ID token; backend memverifikasi token + role di server.
+  const idToken = await getCurrentIdToken();
   await apiRequest(`/api/machines/${machineId}/items/${encodeURIComponent(itemId)}/restock`, {
     method: "POST",
+    headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
     body: {
       amount
     }
