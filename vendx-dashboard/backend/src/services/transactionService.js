@@ -71,20 +71,57 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
 
   // Tolak order baru bila mesin masih punya order aktif (#23).
   // Mencegah pembeli kedua menimpa sesi pembayaran pembeli pertama.
+  // Pengecekan tidak percaya pada state `current_order` saja: kalau state
+  // aktif, transaksi aslinya diverifikasi. Kalau sudah terminal (COMPLETED /
+  // FAILED / TIMEOUT / EXPIRED), `current_order` hanya basi -> auto-recover.
+  const TERMINAL_STATES = [
+    "COMPLETED", "DISPENSE_FAILED", "PAYMENT_TIMEOUT",
+    "EXPIRED", "FAILED", "TIMEOUT"
+  ];
   const existingOrder = await firebaseService.getValue(`/machines/${machine_id}/current_order`);
-  if (existingOrder && existingOrder.transaction_id && existingOrder.transaction_id !== "NONE") {
+  if (existingOrder) {
     const activeStates = [
       "WAITING_PAYMENT", "READY_TO_DISPENSE", "DISPENSING",
       "PAID", "PENDING", "NEEDS_REVIEW"
     ];
     const payState = String(existingOrder.payment_state || "").toUpperCase();
     const ordState = String(existingOrder.order_state || existingOrder.status || "").toUpperCase();
-    if (activeStates.includes(payState) || activeStates.includes(ordState)) {
-      const error = new Error("Machine is busy with another order");
-      error.code = "MACHINE_BUSY";
-      error.statusCode = 409;
-      error.details = { machine_id, active_transaction_id: existingOrder.transaction_id };
-      throw error;
+    const looksActive = activeStates.includes(payState) || activeStates.includes(ordState);
+
+    if (looksActive) {
+      const activeTxId = existingOrder.transaction_id;
+      let realTx = null;
+
+      if (activeTxId && activeTxId !== "NONE") {
+        // Transaksi asli menentukan: kalau sudah terminal, current_order basi.
+        realTx = await firebaseService.getValue(`/transactions/${activeTxId}`);
+      }
+
+      const realPay = String(realTx?.payment_state || "").toUpperCase();
+      const realOrd = String(realTx?.order_state || realTx?.status || "").toUpperCase();
+      const realTerminal = !realTx
+        || TERMINAL_STATES.includes(realPay)
+        || TERMINAL_STATES.includes(realOrd);
+
+      if (realTerminal) {
+        // Auto-recover: kosongkan current_order basi agar mesin tidak macet.
+        await firebaseService.setValue(`/machines/${machine_id}/current_order`, {
+          transaction_id: "NONE",
+          item_id: "NONE",
+          item_name: "NONE",
+          payment_state: "NONE",
+          order_state: "IDLE",
+          status: "IDLE",
+          dispense_result: "NONE",
+          updated_at: now()
+        });
+      } else {
+        const error = new Error("Machine is busy with another order");
+        error.code = "MACHINE_BUSY";
+        error.statusCode = 409;
+        error.details = { machine_id, active_transaction_id: activeTxId };
+        throw error;
+      }
     }
   }
 
