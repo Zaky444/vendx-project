@@ -4,6 +4,35 @@ const logService = require("./logService");
 const { generateSessionId, generateTransactionId } = require("../utils/idGenerator");
 const { now } = require("../utils/time");
 
+// Batas keras penguncian mesin (spec): setelah 25 detik, order menggantung
+// dianggap hangus dan mesin boleh dilepas untuk order berikutnya.
+const LOCK_TIMEOUT_MS = 25000;
+
+/**
+ * Lepaskan kunci mesin: kosongkan current_order + kembalikan status idle.
+ * Dipakai oleh lazy auto-release, cancel, dan webhook.
+ */
+async function releaseMachineLock(machineId) {
+  const timestamp = now();
+
+  await firebaseService.setValue(`/machines/${machineId}/current_order`, {
+    transaction_id: "NONE",
+    item_id: "NONE",
+    item_name: "NONE",
+    payment_state: "NONE",
+    order_state: "IDLE",
+    status: "IDLE",
+    dispense_result: "NONE",
+    updated_at: timestamp
+  });
+
+  await firebaseService.updateValue(`/machines/${machineId}/status`, {
+    machine_state: "IDLE",
+    is_busy: false,
+    last_updated: timestamp
+  });
+}
+
 function validatePositiveQty(qty) {
   const amount = Number(qty);
 
@@ -69,14 +98,16 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
 
   const item = await inventoryService.assertAvailableItem(machine_id, item_id, amount);
 
-  // Order SELALU dibuat. Tidak ada lagi penolakan MACHINE_BUSY: bila ada
-  // order sebelumnya yang tampak aktif, transaksi aslinya diverifikasi dan
-  // current_order basi dibersihkan, lalu order baru ditimpa. Concurrent
-  // payment tetap dicatat lewat log untuk audit, tapi tidak memblokir.
+  // Konkurensi (#23 + spec): transaksi aktif yang mengunci mesin diverifikasi.
+  // Bila transaksi pengunci sudah tidak ada / final / lewat kedaluwarsa, ia
+  // dianggap hangus: statusnya di-expire dan mesin dilepas, lalu order baru
+  // lanjut di request yang sama (tanpa 409). Hanya bila memang masih aktif &
+  // belum kedaluwarsa barulah ditolak MACHINE_BUSY.
   const TERMINAL_STATES = [
-    "COMPLETED", "DISPENSE_FAILED", "PAYMENT_TIMEOUT",
-    "EXPIRED", "FAILED", "TIMEOUT"
+    "COMPLETED", "SUCCESS", "DISPENSE_FAILED", "PAYMENT_TIMEOUT",
+    "PAYMENT_EXPIRED", "PAYMENT_FAILED", "EXPIRED", "CANCELLED", "FAILED", "TIMEOUT"
   ];
+  const PENDING_STATES = ["WAITING_PAYMENT", "PENDING"];
   const existingOrder = await firebaseService.getValue(`/machines/${machine_id}/current_order`);
   if (existingOrder) {
     const activeStates = [
@@ -96,31 +127,47 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
 
       const realPay = String(realTx?.payment_state || "").toUpperCase();
       const realOrd = String(realTx?.order_state || realTx?.status || "").toUpperCase();
-      const realTerminal = !realTx
+      const isFinal = !realTx
         || TERMINAL_STATES.includes(realPay)
         || TERMINAL_STATES.includes(realOrd);
 
-      if (realTerminal) {
-        // current_order basi -> bersihkan.
-        await firebaseService.setValue(`/machines/${machine_id}/current_order`, {
-          transaction_id: "NONE",
-          item_id: "NONE",
-          item_name: "NONE",
-          payment_state: "NONE",
-          order_state: "IDLE",
-          status: "IDLE",
-          dispense_result: "NONE",
-          updated_at: now()
-        });
+      // (c) menggantung tapi sudah lewat expires_at / lebih dari 25s sejak dibuat.
+      const created = Number(realTx?.created_at) || 0;
+      const expAt = Number(realTx?.expired_at || realTx?.payment_expired_at) || 0;
+      const hardLimit = created + LOCK_TIMEOUT_MS;
+      const timedOut = Boolean(realTx)
+        && !isFinal
+        && (
+          (expAt > 0 && now() > expAt)
+          || now() > hardLimit
+        );
+
+      const staleLock = !realTx || isFinal || timedOut;
+
+      if (staleLock) {
+        // Hangus: expire-kan bila masih menggantung, lalu lepaskan mesin.
+        if (realTx && PENDING_STATES.includes(realPay) && !isFinal) {
+          await firebaseService.updateValue(`/transactions/${activeTxId}`, {
+            payment_state: "EXPIRED",
+            order_state: "EXPIRED",
+            status: "EXPIRED",
+            updated_at: now()
+          });
+          await logService.createLog({
+            machine_id,
+            event: "STALE_LOCK_RELEASED",
+            message: `Stale order ${activeTxId} expired & released before creating new order`,
+            transaction_id: activeTxId,
+            source: "BACKEND"
+          });
+        }
+        await releaseMachineLock(machine_id);
       } else {
-        // Ada pembayaran lain masih berjalan -> catat, tapi TETAP lanjut buat order baru.
-        await logService.createLog({
-          machine_id,
-          event: "CONCURRENT_ORDER_WARN",
-          message: `Order baru dibuat saat masih ada order aktif ${activeTxId}`,
-          transaction_id: activeTxId,
-          source: "BACKEND"
-        });
+        const error = new Error("Machine is busy with another order");
+        error.code = "MACHINE_BUSY";
+        error.statusCode = 409;
+        error.details = { machine_id, active_transaction_id: activeTxId };
+        throw error;
       }
     }
   }
@@ -130,7 +177,9 @@ async function createTransaction({ machine_id, item_id, qty, payment_method }) {
   const price = Number(item.price) || 0;
   const totalPrice = price * amount;
   const timestamp = now();
-  const timeoutMs = Number(process.env.PAYMENT_TIMEOUT_MS) || 120000;
+  // Spec poin 1: kedaluwarsa pembayaran 25 detik, selaras dengan LOCK_TIMEOUT
+  // dan custom_expiry Midtrans. Bisa dioverride lewat env bila perlu demo lebih lama.
+  const timeoutMs = Number(process.env.PAYMENT_TIMEOUT_MS) || LOCK_TIMEOUT_MS;
   const expiredAt = timestamp + timeoutMs;
 
   const transaction = {
@@ -422,18 +471,8 @@ async function handleDispenseResult(transactionId, { machine_id, dispense_result
       status: "COMPLETED",
       dispense_result: "SUCCESS"
     });
-    await updateCurrentOrderIfMatches(machine_id, transactionId, {
-      payment_state: "PAID",
-      order_state: "COMPLETED",
-      dispense_result: "SUCCESS",
-      updated_at: timestamp
-    });
-    await firebaseService.updateValue(`/machines/${machine_id}/status`, {
-      machine_state: "IDLE",
-      is_busy: false,
-      dispense_result: "SUCCESS",
-      last_updated: now()
-    });
+    // Spec poin 4: dispensing selesai (sukses) -> selalu lepaskan kunci mesin.
+    await releaseMachineLock(machine_id);
     await logService.createLog({
       machine_id,
       event: "DISPENSE_SUCCESS",
@@ -446,18 +485,8 @@ async function handleDispenseResult(transactionId, { machine_id, dispense_result
       status: "DISPENSE_FAILED",
       dispense_result: "FAILED"
     });
-    await updateCurrentOrderIfMatches(machine_id, transactionId, {
-      payment_state: "PAID",
-      order_state: "DISPENSE_FAILED",
-      dispense_result: "FAILED",
-      updated_at: timestamp
-    });
-    await firebaseService.updateValue(`/machines/${machine_id}/status`, {
-      machine_state: "ERROR",
-      is_busy: false,
-      dispense_result: "FAILED",
-      last_updated: now()
-    });
+    // Spec poin 4: dispensing selesai (gagal) -> selalu lepaskan kunci mesin.
+    await releaseMachineLock(machine_id);
     await logService.createLog({
       machine_id,
       event: "DISPENSE_FAILED",
@@ -473,6 +502,44 @@ async function handleDispenseResult(transactionId, { machine_id, dispense_result
     payment_state: updatedTransaction.payment_state,
     order_state: updatedTransaction.order_state || updatedTransaction.status,
     dispense_result: updatedTransaction.dispense_result
+  };
+}
+
+/**
+ * Pembatalan eksplisit (spec poin 3) - dipanggil ESP32 (tombol Batal / countdown
+ * habis) atau web. Mengubah status jadi CANCELLED dan melepaskan kunci mesin.
+ */
+async function cancelTransaction(transactionId, { machine_id } = {}) {
+  const transaction = await getTransaction(transactionId);
+  const machineId = machine_id || transaction.machine_id;
+  const timestamp = now();
+
+  await firebaseService.updateValue(`/transactions/${transactionId}`, {
+    payment_state: "CANCELLED",
+    order_state: "CANCELLED",
+    status: "CANCELLED",
+    updated_at: timestamp
+  });
+
+  // Lepaskan kunci mesin hanya bila masih memegang transaksi ini.
+  const currentOrder = await firebaseService.getValue(`/machines/${machineId}/current_order`);
+  if (currentOrder && currentOrder.transaction_id === transactionId) {
+    await releaseMachineLock(machineId);
+  }
+
+  await logService.createLog({
+    machine_id: machineId,
+    event: "TRANSACTION_CANCELLED",
+    message: `Transaction ${transactionId} cancelled`,
+    transaction_id: transactionId,
+    source: "MACHINE"
+  });
+
+  return {
+    transaction_id: transactionId,
+    payment_state: "CANCELLED",
+    order_state: "CANCELLED",
+    status: "CANCELLED"
   };
 }
 
@@ -531,5 +598,7 @@ module.exports = {
   listTransactions,
   getSummary,
   updateTransaction,
+  cancelTransaction,
+  releaseMachineLock,
   handleDispenseResult
 };

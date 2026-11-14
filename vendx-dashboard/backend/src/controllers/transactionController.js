@@ -63,6 +63,12 @@ async function submitDispenseResult(req, res) {
   return sendSuccess(res, result, "Dispense result updated");
 }
 
+// Batal/force-release dari ESP32 (tombol Batal / countdown habis) atau web - spec poin 3.
+async function cancelTransaction(req, res) {
+  const result = await transactionService.cancelTransaction(req.params.transactionId, req.body);
+  return sendSuccess(res, result, "Transaction cancelled");
+}
+
 async function getTransactionStatus(req, res) {
   const status = await transactionService.getTransactionStatus(req.params.transactionId);
   return sendSuccess(res, status, "Transaction status fetched");
@@ -83,6 +89,7 @@ module.exports = {
   createTransaction,
   listTransactions,
   submitDispenseResult,
+  cancelTransaction,
   getSummary,
   getTransactionStatus,
   simulatePaid

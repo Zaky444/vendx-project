@@ -51,6 +51,12 @@ function buildPaymentPayload(transaction) {
       first_name: "VendX",
       last_name: transaction.machine_id,
       email: "customer@vendx.local"
+    },
+    // Spec poin 1: selaraskan kedaluwarsa Midtrans dengan LOCK_TIMEOUT (25 detik).
+    // custom_expiry didukung Snap & Core API (charge).
+    custom_expiry: {
+      expiry_duration: 25,
+      unit: "second"
     }
   };
 }
@@ -352,17 +358,27 @@ async function handleMidtransNotification(body) {
     updated_at: timestamp
   });
 
-  await updateCurrentOrderIfMatches(transaction.machine_id, transactionId, {
-    payment_state: mappedStatus.payment_state,
-    order_state: mappedStatus.order_state,
-    updated_at: timestamp
-  });
+  // Spec poin 4: outcome non-paid (expire/cancel/deny/failure) MELEPASKAN
+  // kunci mesin agar tidak mengunci order berikutnya. PAID/WAITING tetap
+  // mempertahankan is_busy.
+  const terminalNonPaid = mappedStatus.payment_state !== "PAID"
+    && mappedStatus.payment_state !== "WAITING_PAYMENT";
 
-  await firebaseService.updateValue(`/machines/${transaction.machine_id}/status`, {
-    machine_state: mappedStatus.status,
-    is_busy: mappedStatus.payment_state === "PAID" || mappedStatus.payment_state === "WAITING_PAYMENT",
-    last_updated: timestamp
-  });
+  if (terminalNonPaid) {
+    await transactionService.releaseMachineLock(transaction.machine_id);
+  } else {
+    await updateCurrentOrderIfMatches(transaction.machine_id, transactionId, {
+      payment_state: mappedStatus.payment_state,
+      order_state: mappedStatus.order_state,
+      updated_at: timestamp
+    });
+
+    await firebaseService.updateValue(`/machines/${transaction.machine_id}/status`, {
+      machine_state: mappedStatus.status,
+      is_busy: mappedStatus.payment_state === "PAID" || mappedStatus.payment_state === "WAITING_PAYMENT",
+      last_updated: timestamp
+    });
+  }
 
   await logService.createLog({
     machine_id: transaction.machine_id,

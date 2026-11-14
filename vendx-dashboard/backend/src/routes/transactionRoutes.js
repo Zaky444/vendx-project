@@ -20,6 +20,8 @@ router.get("/summary", asyncHandler(transactionController.getSummary));
 // Buat transaksi = tulis ke DB + panggil Midtrans -> rate limit ketat.
 router.post("/", strictLimiter, createTransactionValidation, handleValidation, asyncHandler(transactionController.createTransaction));
 router.get("/:transactionId/status", asyncHandler(transactionController.getTransactionStatus));
+// Batal/force-release dari ESP32 (tombol Batal / countdown habis) atau web - spec poin 3.
+router.post("/:transactionId/cancel", asyncHandler(transactionController.cancelTransaction));
 // simulate-paid memaksa transaksi jadi PAID tanpa bayar -> auth + rate limit ketat.
 router.post("/:transactionId/simulate-paid", strictLimiter, requirePrivilegedAccess, asyncHandler(transactionController.simulatePaid));
 router.post("/:transactionId/dispense-result", asyncHandler(transactionController.submitDispenseResult));
