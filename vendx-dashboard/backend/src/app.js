@@ -203,11 +203,17 @@ app.use((error, req, res, next) => {
 
   const statusCode = error.statusCode || 500;
 
+  // Untuk error 5xx, JANGAN bocorkan pesan internal (stack, DB, dsb) ke klien.
+  // Detail lengkap tetap tercatat di log server di atas.
+  const clientMessage = statusCode >= 500
+    ? "Internal server error"
+    : (error.message || "Internal server error");
+
   return sendError(
     res,
-    error.message || "Internal server error",
+    clientMessage,
     statusCode,
-    error.details || null,
+    statusCode >= 500 ? null : (error.details || null),
     error.code || "ERROR"
   );
 });

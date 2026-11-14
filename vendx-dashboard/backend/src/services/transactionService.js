@@ -327,11 +327,6 @@ async function handleDispenseResult(transactionId, { machine_id, dispense_result
   const itemId = transaction.item_id;
   const qty = Number(transaction.qty) || 0;
 
-  console.log("[dispense] transaction_id:", transactionId);
-  console.log("[dispense] machine_id:", machine_id);
-  console.log("[dispense] item_id:", itemId);
-  console.log("[dispense] qty:", qty);
-
   if (transaction.machine_id !== machine_id) {
     const error = new Error("machine_id does not match transaction");
     error.statusCode = 400;

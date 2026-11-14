@@ -133,11 +133,6 @@ async function decrementStock(machineId, itemId, qty) {
   const stockRef = db.ref(stockPath);
   const stockSnap = await stockRef.once("value");
 
-  console.log("[dispense] stockPath:", stockPath);
-  console.log("[dispense] stock exists:", stockSnap.exists());
-  console.log("[dispense] stock before:", stockSnap.val());
-  console.log("[dispense] stock type:", typeof stockSnap.val());
-
   if (!stockSnap.exists()) {
     const error = new Error("Stock path not found");
     error.statusCode = 404;
@@ -170,8 +165,6 @@ async function decrementStock(machineId, itemId, qty) {
   }
 
   const result = await stockRef.transaction((currentStock) => {
-    console.log("[dispense] stock transaction current:", currentStock);
-
     if (currentStock === null || currentStock === undefined) {
       return stockBefore - amount;
     }
@@ -184,9 +177,6 @@ async function decrementStock(machineId, itemId, qty) {
 
     return stock - amount;
   });
-
-  console.log("[dispense] stock transaction committed:", result.committed);
-  console.log("[dispense] stock after:", result.snapshot.val());
 
   if (!result.committed) {
     const error = new Error("Insufficient stock for dispense");
