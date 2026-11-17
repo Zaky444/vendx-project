@@ -5,6 +5,8 @@ import {
   formatTimestamp,
   getBadgeClass,
   getStockLevel,
+  getDisplayName,
+  getSlotCode,
   safeText,
   setBadge,
   setText
@@ -191,15 +193,18 @@ function renderItems(items = {}) {
       const activeLabel = item?.is_active === true ? "ACTIVE" : "INACTIVE";
       const stockWidth = Math.max(0, Math.min(100, (stock / 12) * 100));
       const restockDisabled = canRestock() ? "" : "disabled";
+      // Layer tampilan: nama & kode slot dari mapping. itemId asli tetap dipakai utk API.
+      const displayName = getDisplayName(itemId, item?.name);
+      const slotCode = getSlotCode(itemId);
 
       return `
         <tr>
           <td>${Number(item?.slot_number) || 0}</td>
-          <td>${escapeHtml(itemId)}</td>
+          <td>${escapeHtml(slotCode)}</td>
           <td>
             <div class="item-name">
-              <strong>${escapeHtml(item?.name)}</strong>
-              <span>${escapeHtml(itemId)}</span>
+              <strong>${escapeHtml(displayName)}</strong>
+              <span>${escapeHtml(slotCode)}</span>
             </div>
           </td>
           <td>${formatRupiah(item?.price)}</td>
@@ -269,8 +274,8 @@ function renderCurrentOrder(order = {}) {
     <div class="order-grid">
       <div class="order-row"><span>Transaction ID</span><span>${escapeHtml(transactionId)}</span></div>
       <div class="order-row"><span>Session ID</span><span>${escapeHtml(order.session_id)}</span></div>
-      <div class="order-row"><span>Item ID</span><span>${escapeHtml(order.item_id)}</span></div>
-      <div class="order-row"><span>Item Name</span><span>${escapeHtml(order.item_name)}</span></div>
+      <div class="order-row"><span>Item ID</span><span>${escapeHtml(getSlotCode(order.item_id))}</span></div>
+      <div class="order-row"><span>Item Name</span><span>${escapeHtml(getDisplayName(order.item_id, order.item_name))}</span></div>
       <div class="order-row"><span>Quantity</span><span>${Number(order.qty) || 0}</span></div>
       <div class="order-row"><span>Total Price</span><span>${formatRupiah(order.total_price)}</span></div>
       <div class="order-row"><span>Payment Method</span><span>${escapeHtml(order.payment_method)}</span></div>
@@ -324,7 +329,7 @@ function renderTransactions(transactions = {}) {
     .map((transaction) => `
       <tr>
         <td>${escapeHtml(transaction?.transaction_id)}</td>
-        <td>${escapeHtml(transaction?.item_name)}</td>
+        <td>${escapeHtml(getDisplayName(transaction?.item_id, transaction?.item_name))}</td>
         <td>${Number(transaction?.qty) || 0}</td>
         <td>${formatRupiah(transaction?.total_price)}</td>
         <td>${createBadge(transaction?.payment_state)}</td>
@@ -383,7 +388,7 @@ function openRestockModal(itemId) {
   }
 
   restockItemId.value = itemId;
-  restockItemName.textContent = safeText(item.name);
+  restockItemName.textContent = getDisplayName(itemId, item.name);
   restockCurrentStock.textContent = String(Number(item.stock) || 0);
   restockAmount.value = "";
   restockError.textContent = "";
@@ -510,7 +515,7 @@ restockForm?.addEventListener("submit", async (event) => {
     await restockItem(itemId, amount);
     await loadDashboardData();
     closeRestockModal();
-    showToast(`Stok ${itemId} berhasil ditambah ${amount} unit.`, "success");
+    showToast(`Stok ${getDisplayName(itemId, latestItems[itemId]?.name)} berhasil ditambah ${amount} unit.`, "success");
   } catch (error) {
     console.error("Restock failed", error);
     restockError.textContent = "Restock gagal. Periksa koneksi Backend API.";

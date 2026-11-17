@@ -92,6 +92,30 @@ export function setBadge(elementId, value) {
   element.className = `badge ${getBadgeClass(text)}`;
 }
 
+// Pemetaan tampilan produk (hanya layer UI, tidak mengubah data backend/Firebase).
+// item_id asli ("cola"/"sprite"/"kopi") tetap dipakai untuk request API.
+// "susu" dan item lain tidak dipetakan -> fallback ke nama asli dari database.
+export const PRODUCT_DISPLAY_MAP = {
+  cola: { name: "Produk A", slotCode: "SLOT-A" },
+  sprite: { name: "Produk B", slotCode: "SLOT-B" },
+  kopi: { name: "Produk C", slotCode: "SLOT-C" }
+};
+
+// Ambil nama tampilan produk. item.name = nama asli dari database (fallback).
+export function getDisplayName(itemId, realName) {
+  const mapped = PRODUCT_DISPLAY_MAP[String(itemId || "").toLowerCase()];
+  if (mapped) {
+    return mapped.name;
+  }
+  return safeText(realName);
+}
+
+// Ambil kode slot tampilan (SLOT-A/B/C). Fallback ke item_id asli.
+export function getSlotCode(itemId) {
+  const mapped = PRODUCT_DISPLAY_MAP[String(itemId || "").toLowerCase()];
+  return mapped ? mapped.slotCode : safeText(itemId);
+}
+
 export function escapeHtml(value) {
   return safeText(value)
     .replace(/&/g, "&amp;")
